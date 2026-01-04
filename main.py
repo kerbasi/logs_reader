@@ -38,45 +38,75 @@ def main():
     
     print_header("Log Reader V2")
 
+    # Initial values from args
     sn = args.sn
-    if not sn:
-        sn = input("Enter Serial Number (SN): ").strip()
-        if not sn:
-            print_error("SN is required.")
-            sys.exit(1)
-
     pn = args.pn
-    if not pn:
-        # Resolve SN -> PN
-        print(f"Resolving Product Number for SN: {sn}...")
-        resolver = ProductResolver()
-        pn = resolver.get_product_pn(sn)
-        
-        if not pn:
-            print_error("Could not resolve PN. Please specify manually with --pn")
-            # For testing/dev, if resolver fails, we might want to let user continue?
-            # Original script logic exited if path construction failed implicitly.
-            
-            # Allow fallback manual entry
-            pn = input("Enter Product Number (PN) manually: ").strip()
-            if not pn:
-                sys.exit(1)
-        else:
-            print(f"Resolved PN: {pn}")
-
-    # Prepare search paths
     search_paths = args.path if args.path else DEFAULT_PATHS
-    
-    print(f"Searching in: {len(search_paths)} directories...")
-    searcher = LogSearcher(search_paths)
-    logs = searcher.search(pn, sn)
-    
-    display_results(logs)
-    
-    if logs:
-        choice_idx = select_log(logs)
-        if choice_idx >= 0:
-            view_file(logs[choice_idx]['path'])
+
+    while True:
+        # 1. Acquire SN
+        if not sn:
+            try:
+                sn = input("Enter Serial Number (SN) (or 'q' to quit): ").strip()
+            except KeyboardInterrupt:
+                 sys.exit(0)
+            
+            if sn.lower() == 'q':
+                sys.exit(0)
+            if not sn:
+                continue
+
+        # 2. Resolve PN
+        current_pn = pn
+        if not current_pn:
+            print(f"Resolving Product Number for SN: {sn}...")
+            resolver = ProductResolver()
+            current_pn = resolver.get_product_pn(sn)
+            
+            if not current_pn:
+                print_error("Could not resolve PN. Please specify manually.")
+                # Fallback manual entry
+                current_pn = input("Enter Product Number (PN) manually: ").strip()
+                if not current_pn:
+                    # Reset and loop
+                    sn = None
+                    continue
+            else:
+                print(f"Resolved PN: {current_pn}")
+        
+        # 3. Search
+        print(f"Searching in: {len(search_paths)} directories...")
+        searcher = LogSearcher(search_paths)
+        logs = searcher.search(current_pn, sn)
+        
+        display_results(logs)
+        
+        # 4. Interact
+        if logs:
+            while True:
+                choice_idx = select_log(logs)
+                
+                if choice_idx == -1: # Quit
+                    sys.exit(0)
+                elif choice_idx == -2: # Search Again
+                    # Reset parameters for next loop
+                    sn = None
+                    pn = None # Clear PN to re-resolve or re-ask
+                    print("\n" + "-"*30 + "\n")
+                    break # Break inner loop, returns to top of while True
+                else:
+                    # View File
+                    view_file(logs[choice_idx]['path'])
+                    # Loop continues, allowing viewing another file
+        else:
+            # If no logs found, ask what to do
+            retry = input("Search again? (y/n): ").strip().lower()
+            if retry == 'y':
+                sn = None
+                pn = None
+                continue
+            else:
+                sys.exit(0)
 
 if __name__ == "__main__":
     main()

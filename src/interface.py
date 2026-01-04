@@ -34,15 +34,21 @@ def display_results(logs: List[Dict[str, str]]):
     
     for idx, log in enumerate(logs, 1):
         # Format timestamp if needed, for now just name
-        print(f"{Colors.BOLD}[{idx}]{Colors.ENDC} {log['name']}")
+        tags_str = ""
+        if log.get('tags'):
+             tags_str = " ".join([f"{Colors.FAIL}[{t}]{Colors.ENDC}" for t in log['tags']]) + " "
+
+        print(f"{Colors.BOLD}[{idx}]{Colors.ENDC} {tags_str}{log['name']}")
         print(f"    {Colors.OKCYAN}{log['path']}{Colors.ENDC}")
 
 def select_log(logs: List[Dict[str, str]]) -> int:
     while True:
         try:
-            choice = input(f"\n{Colors.BOLD}Enter number to view (or 'q' to quit): {Colors.ENDC}").strip()
+            choice = input(f"\n{Colors.BOLD}Enter number to view, 's' to search again, or 'q' to quit: {Colors.ENDC}").strip()
             if choice.lower() == 'q':
                 return -1
+            if choice.lower() == 's':
+                return -2 # Signal to restart
             
             idx = int(choice)
             if 1 <= idx <= len(logs):

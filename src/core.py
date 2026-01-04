@@ -180,10 +180,17 @@ class LogSearcher:
             # We just filter files by name containing SN
             for f in debug_dir.iterdir():
                 if f.is_file() and sn in f.name:
+                    tags = []
+                    # Check if path indicates a debug environment
+                    # Check for '/dbg/' in the full path (case insensitive just in case)
+                    if "/dbg/" in str(f.absolute()).lower() or "/debug/" in str(f.absolute()).lower():
+                         tags.append("DEBUG")
+
                     results.append({
                         "path": str(f.absolute()),
                         "name": f.name,
-                        "date": f.stat().st_mtime
+                        "date": f.stat().st_mtime,
+                        "tags": tags
                     })
         except Exception:
             pass
