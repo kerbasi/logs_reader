@@ -183,7 +183,8 @@ class LogSearcher:
                     tags = []
                     # Check if path indicates a debug environment
                     # Check for '/dbg/' in the full path (case insensitive just in case)
-                    if "/dbg/" in str(f.absolute()).lower() or "/debug/" in str(f.absolute()).lower():
+                    # We strictly want /dbg/ roots, avoiding the leaf 'DEBUG' folder common to all logs
+                    if "/dbg/" in str(f.absolute()).lower():
                          tags.append("DEBUG")
 
                     results.append({
