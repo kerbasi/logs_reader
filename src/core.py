@@ -49,7 +49,7 @@ class ProductResolver:
         ]
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, timeout=10)
             if result.returncode != 0:
                 print(f"Error calling service: {result.stderr}")
                 return None
@@ -129,25 +129,37 @@ class LogSearcher:
             # Pattern: pn_dir / YYYY / MM / pn.mlnx
             # or just use os.walk to find relevant files.
             
-            for year_dir in pn_dir.iterdir():
-                if not year_dir.is_dir() or not year_dir.name.isdigit(): # expect YYYY
+            # Try to handle both YYYY/MM and YYYYMM structures
+            # Original script seemed to use YYYYMM (e.g. 202201)
+            
+            for child in pn_dir.iterdir():
+                if not child.is_dir():
                     continue
+
+                # Case 1: Child is YYYY (e.g. 2024) -> Look for MM inside
+                if child.name.isdigit() and len(child.name) == 4:
+                     for month_dir in child.iterdir():
+                        if month_dir.is_dir():
+                            self._check_dir_for_logs(month_dir, pn, sn, found_logs)
                 
-                for month_dir in year_dir.iterdir():
-                    if not month_dir.is_dir():
-                        continue
-                        
-                    # Check for index file
-                    index_file = month_dir / f"{pn}.mlnx"
-                    
-                    if index_file.exists():
-                        if self._grep_file(index_file, sn):
-                            # scan DEBUG folder
-                            debug_dir = month_dir / "DEBUG"
-                            if debug_dir.exists():
-                                found_logs.extend(self._find_logs_in_debug(debug_dir, sn))
+                # Case 2: Child is YYYYMM (e.g. 202401)
+                elif child.name.isdigit() and len(child.name) == 6:
+                    self._check_dir_for_logs(child, pn, sn, found_logs)
         
         return found_logs
+
+    def _check_dir_for_logs(self, dir_path: Path, pn: str, sn: str, found_logs: List[Dict]):
+        """Helper to check a specific directory (YYYYMM level) for index file and logs"""
+        index_file = dir_path / f"{pn}.mlnx"
+        
+        if index_file.exists():
+            if self._grep_file(index_file, sn):
+                # scan DEBUG folder
+                debug_dir = dir_path / "DEBUG"
+                if debug_dir.exists():
+                    found_logs.extend(self._find_logs_in_debug(debug_dir, sn))
+        
+
 
     def _grep_file(self, file_path: Path, pattern: str) -> bool:
         """Check if pattern exists in file. Efficient line-by-line."""
