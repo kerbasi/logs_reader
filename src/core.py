@@ -153,26 +153,27 @@ class LogSearcher:
         index_file = dir_path / f"{pn}.mlnx"
         
         if index_file.exists():
-            if self._grep_file(index_file, sn):
+            description = self._grep_file(index_file, sn)
+            if description:
                 # scan DEBUG folder
                 debug_dir = dir_path / "DEBUG"
                 if debug_dir.exists():
-                    found_logs.extend(self._find_logs_in_debug(debug_dir, sn))
+                    found_logs.extend(self._find_logs_in_debug(debug_dir, sn, description))
         
 
 
-    def _grep_file(self, file_path: Path, pattern: str) -> bool:
-        """Check if pattern exists in file. Efficient line-by-line."""
+    def _grep_file(self, file_path: Path, pattern: str) -> Optional[str]:
+        """Check if pattern exists in file. Returns the matching line or None."""
         try:
             with open(file_path, 'r', errors='ignore') as f:
                 for line in f:
                     if pattern in line:
-                        return True
+                        return line.strip()
         except Exception:
-            return False
-        return False
+            return None
+        return None
 
-    def _find_logs_in_debug(self, debug_dir: Path, sn: str) -> List[Dict[str, str]]:
+    def _find_logs_in_debug(self, debug_dir: Path, sn: str, description: Optional[str] = None) -> List[Dict[str, str]]:
         """List files in debug folder matching SN."""
         results = []
         try:
@@ -191,7 +192,8 @@ class LogSearcher:
                         "path": str(f.absolute()),
                         "name": f.name,
                         "date": f.stat().st_mtime,
-                        "tags": tags
+                        "tags": tags,
+                        "description": description
                     })
         except Exception:
             pass

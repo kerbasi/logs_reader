@@ -38,8 +38,14 @@ def display_results(logs: List[Dict[str, str]]):
         if log.get('tags'):
              tags_str = " ".join([f"{Colors.FAIL}[{t}]{Colors.ENDC}" for t in log['tags']]) + " "
 
-        print(f"{Colors.BOLD}[{idx}]{Colors.ENDC} {tags_str}{log['name']}")
-        print(f"    {Colors.OKCYAN}{log['path']}{Colors.ENDC}")
+        print(f"{Colors.BOLD}[{idx}]{Colors.ENDC} {tags_str}{Colors.OKGREEN}{log['name']}{Colors.ENDC}")
+        print(f"    {Colors.WARNING}Path:{Colors.ENDC} {log['path']}")
+        
+        if log.get('description'):
+            print(f"    {Colors.OKBLUE}Info:{Colors.ENDC} {log['description']}")
+        
+        # Add a separator blank line
+        print()
 
 def select_log(logs: List[Dict[str, str]]) -> int:
     while True:

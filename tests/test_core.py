@@ -52,6 +52,7 @@ class TestLogSearcher(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertIn(self.sn, results[0]['name'])
         self.assertTrue(results[0]['path'].startswith(str(self.root)))
+        self.assertEqual(results[0]['description'], f"Some info... {self.sn} ... more info")
 
     def test_search_no_match(self):
         searcher = LogSearcher([str(self.root)])
