@@ -38,7 +38,16 @@ def display_results(logs: List[Dict[str, str]]):
         if log.get('tags'):
              tags_str = " ".join([f"{Colors.FAIL}[{t}]{Colors.ENDC}" for t in log['tags']]) + " "
 
-        print(f"{Colors.BOLD}[{idx}]{Colors.ENDC} {tags_str}{Colors.OKGREEN}{log['name']}{Colors.ENDC}")
+        # Determine text color based on description
+        name_color = Colors.OKBLUE # Default neutral
+        if log.get('description'):
+            desc_lower = log['description'].lower()
+            if "pass" in desc_lower:
+                name_color = Colors.OKGREEN
+            elif any(x in desc_lower for x in ["fail", "error", "timeout", "exception"]):
+                name_color = Colors.FAIL
+
+        print(f"{Colors.BOLD}[{idx}]{Colors.ENDC} {tags_str}{name_color}{log['name']}{Colors.ENDC}")
         print(f"    {Colors.WARNING}Path:{Colors.ENDC} {log['path']}")
         
         if log.get('description'):
