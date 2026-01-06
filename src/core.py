@@ -153,48 +153,71 @@ class LogSearcher:
         index_file = dir_path / f"{pn}.mlnx"
         
         if index_file.exists():
-            description = self._grep_file(index_file, sn)
-            if description:
+            # Get ALL matching lines as potential descriptions
+            descriptions = self._grep_file(index_file, sn)
+            if descriptions:
                 # scan DEBUG folder
                 debug_dir = dir_path / "DEBUG"
                 if debug_dir.exists():
-                    found_logs.extend(self._find_logs_in_debug(debug_dir, sn, description))
+                    found_logs.extend(self._find_logs_in_debug(debug_dir, sn, descriptions))
         
 
 
-    def _grep_file(self, file_path: Path, pattern: str) -> Optional[str]:
-        """Check if pattern exists in file. Returns the matching line or None."""
+    def _grep_file(self, file_path: Path, pattern: str) -> List[str]:
+        """Check if pattern exists in file. Returns ALL matching lines."""
+        matches = []
         try:
             with open(file_path, 'r', errors='ignore') as f:
                 for line in f:
                     if pattern in line:
-                        return line.strip()
+                        matches.append(line.strip())
         except Exception:
-            return None
-        return None
+            pass
+        return matches
 
-    def _find_logs_in_debug(self, debug_dir: Path, sn: str, description: Optional[str] = None) -> List[Dict[str, str]]:
+    def _find_logs_in_debug(self, debug_dir: Path, sn: str, descriptions: List[str] = []) -> List[Dict[str, str]]:
         """List files in debug folder matching SN."""
         results = []
+        raw_logs = []
+        
         try:
-            # Original script: ls -ltr ... | grep sn
-            # We just filter files by name containing SN
+            # First, collect all matching files
             for f in debug_dir.iterdir():
                 if f.is_file() and sn in f.name:
-                    tags = []
-                    # Check if path indicates a debug environment
-                    # Check for '/dbg/' in the full path (case insensitive just in case)
-                    # We strictly want /dbg/ roots, avoiding the leaf 'DEBUG' folder common to all logs
-                    if "/dbg/" in str(f.absolute()).lower():
+                    raw_logs.append(f)
+            
+            # Sort by modification time (oldest first)
+            # This aligns with the assumption that lines in index file are written chronologically
+            raw_logs.sort(key=lambda x: x.stat().st_mtime)
+
+            for idx, f in enumerate(raw_logs):
+                tags = []
+                if "/dbg/" in str(f.absolute()).lower():
                          tags.append("DEBUG")
 
-                    results.append({
-                        "path": str(f.absolute()),
-                        "name": f.name,
-                        "date": f.stat().st_mtime,
-                        "tags": tags,
-                        "description": description
-                    })
+                # Find matching description
+                best_desc = None
+                file_name = f.name
+                file_stem = f.stem
+
+                # 1. Try Heuristic matching (content match)
+                for desc in descriptions:
+                    if file_name in desc or file_stem in desc:
+                        best_desc = desc
+                        break
+                
+                # 2. Fallback: Chronological mapping
+                # If we couldn't match by name, and we have descriptions, map by index
+                if not best_desc and idx < len(descriptions):
+                     best_desc = descriptions[idx]
+
+                results.append({
+                    "path": str(f.absolute()),
+                    "name": f.name,
+                    "date": f.stat().st_mtime,
+                    "tags": tags,
+                    "description": best_desc
+                })
         except Exception:
             pass
         return results
