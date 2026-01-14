@@ -150,16 +150,32 @@ class LogSearcher:
 
     def _check_dir_for_logs(self, dir_path: Path, pn: str, sn: str, found_logs: List[Dict]):
         """Helper to check a specific directory (YYYYMM level) for index file and logs"""
-        index_file = dir_path / f"{pn}.mlnx"
         
-        if index_file.exists():
-            # Get ALL matching lines as potential descriptions
-            descriptions = self._grep_file(index_file, sn)
-            if descriptions:
-                # scan DEBUG folder
-                debug_dir = dir_path / "DEBUG"
-                if debug_dir.exists():
-                    found_logs.extend(self._find_logs_in_debug(debug_dir, sn, descriptions))
+        # 1. Collect descriptions from ALL *.mlnx files
+        descriptions = []
+        try:
+             for item in dir_path.glob("*.mlnx"):
+                 if item.is_file():
+                      descriptions.extend(self._grep_file(item, sn))
+        except Exception:
+             pass
+
+        # 2. Search for logs in DEBUG dir (standard requirement)
+        debug_dir = dir_path / "DEBUG"
+        debug_logs = []
+        if debug_dir.exists():
+            debug_logs = self._find_logs_in_dir(debug_dir, sn, descriptions)
+            found_logs.extend(debug_logs)
+
+        # 3. Search for logs in current dir (relaxed requirement)
+        # Filter duplicates: if same filename exists in DEBUG, skip it here
+        parent_logs = self._find_logs_in_dir(dir_path, sn, descriptions)
+        
+        debug_filenames = {Path(l['path']).name for l in debug_logs}
+        
+        for log in parent_logs:
+            if log['name'] not in debug_filenames:
+                found_logs.append(log)
         
 
 
@@ -175,15 +191,25 @@ class LogSearcher:
             pass
         return matches
 
-    def _find_logs_in_debug(self, debug_dir: Path, sn: str, descriptions: List[str] = []) -> List[Dict[str, str]]:
+    def _find_logs_in_dir(self, target_dir: Path, sn: str, descriptions: List[str] = []) -> List[Dict[str, str]]:
         """List files in debug folder matching SN."""
         results = []
         raw_logs = []
         
         try:
             # First, collect all matching files
-            for f in debug_dir.iterdir():
-                if f.is_file() and sn in f.name:
+            for f in target_dir.iterdir():
+                if not f.is_file():
+                    continue
+                
+                # Check for "led" or "SUMMARY" in name (case-insensitive or sensitive? User said "led" and "SUMMARY")
+                # Usually best to match exact what user said, but maybe ignore case? 
+                # User request: "filter logs with led and SUMMARY in the name"
+                # Let's check both as substrings
+                if "led" in f.name or "SUMMARY" in f.name:
+                    continue
+                    
+                if sn in f.name:
                     raw_logs.append(f)
             
             # Sort by modification time (oldest first)

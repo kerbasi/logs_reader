@@ -23,9 +23,9 @@ DEFAULT_PATHS = [
     "/usr/flexfs/lion_cub/log/ft",
     "/usr/flexfs/lion_cub/log",
     "/usr/flexfs/lion_cub/log/customization",
-    "/usr/flexfs/lion_cub/dbg/log/ft",
-    "/usr/flexfs/lion_cub/dbg/log",
-    "/usr/flexfs/lion_cub/dbg/log/customization"
+    "/usr/flexfs/lion_cub/log/dbg/ft",
+    "/usr/flexfs/lion_cub/log/dbg",
+    "/usr/flexfs/lion_cub/log/dbg/customization"
 ]
 
 def main():
