@@ -2,6 +2,7 @@ import os
 import subprocess
 import re
 import json
+import sys
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -51,37 +52,24 @@ class ProductResolver:
         try:
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, timeout=10)
             if result.returncode != 0:
-                print(f"Error calling service: {result.stderr}")
+                print(f"Error: QMS3 service call failed (curl exit {result.returncode}): {result.stderr.strip()}", file=sys.stderr)
                 return None
-            
-            # The original script output seems to be something like:
-            # {"d":"[{\"PN\":\"S123456\"}]"} or similar depending on the messy parsing in original.
-            # Original script did: my_new_split = (my_split.split(":")[3].split(",")[0])
-            # This implies the output is likely JSON wrapped in string or similar.
-            # Let's try to parse it cleanly, or use the regex approach if it's text.
-            
-            # Crude parsing to match original behavior's logic but safer
-            # Expected pattern in response: ... "PN":"<LogPrefix>" ...
-            # Original script variable name is `my_new_split`, which seems to be the directory name.
-            
-            # Let's try flexible regex to find the value after "PN":"
+
             match = re.search(r'"PN"\s*:\s*"([^"]+)"', result.stdout)
             if match:
                 return match.group(1)
-            
-            # Fallback: maybe the response is just the string? 
-            # Original script: my_new_split = my_split.split(":")[3].split(",")[0]
-            # This is very fragile. We will stick to regex which is more robust.
+
+            print(f"Error: Could not find 'PN' in service response. Raw response: {result.stdout[:200]!r}", file=sys.stderr)
             return None
 
         except subprocess.TimeoutExpired:
-            print("Timeout calling QMS3 service.")
+            print(f"Error: QMS3 service at {self.site_url} did not respond within 10s. Check network or use --pn to skip lookup.", file=sys.stderr)
             return None
         except FileNotFoundError:
-            print("Error: 'curl' command not found. Is this Linux?")
+            print("Error: 'curl' not found. Install curl or use --pn to specify the Product Number manually.", file=sys.stderr)
             return None
         except Exception as e:
-            print(f"Unexpected error resolving SN: {e}")
+            print(f"Error: Unexpected failure resolving SN via QMS3: {e}", file=sys.stderr)
             return None
 
 class LogSearcher:
@@ -89,8 +77,9 @@ class LogSearcher:
     Searches for log files in a given directory structure.
     """
     
-    def __init__(self, root_dirs: List[str]):
+    def __init__(self, root_dirs: List[str], exclude_name_fragments: List[str] = None):
         self.root_dirs = root_dirs
+        self.exclude_name_fragments = exclude_name_fragments if exclude_name_fragments is not None else ["led"]
 
     def search(self, pn: str, sn: str) -> List[Dict[str, str]]:
         """
@@ -154,28 +143,25 @@ class LogSearcher:
         # 1. Collect descriptions from ALL *.mlnx files
         descriptions = []
         try:
-             for item in dir_path.glob("*.mlnx"):
-                 if item.is_file():
-                      descriptions.extend(self._grep_file(item, sn))
-        except Exception:
-             pass
+            for item in dir_path.glob("*.mlnx"):
+                if item.is_file():
+                    descriptions.extend(self._grep_file(item, sn))
+        except Exception as e:
+            print(f"Warning: Could not read index files in {dir_path}: {e}", file=sys.stderr)
 
-        # 2. Search for logs in DEBUG dir (standard requirement)
+        # 2. Search for logs in DEBUG dir (preferred source)
         debug_dir = dir_path / "DEBUG"
-        debug_logs = []
         if debug_dir.exists():
             debug_logs = self._find_logs_in_dir(debug_dir, sn, descriptions)
-            found_logs.extend(debug_logs)
+            if debug_logs:
+                # DEBUG has results — use them exclusively and skip the parent dir.
+                # Any file outside DEBUG is considered a lower-priority copy.
+                found_logs.extend(debug_logs)
+                return
 
-        # 3. Search for logs in current dir (relaxed requirement)
-        # Filter duplicates: if same filename exists in DEBUG, skip it here
+        # 3. Fall back to parent dir only when DEBUG has nothing for this SN
         parent_logs = self._find_logs_in_dir(dir_path, sn, descriptions)
-        
-        debug_filenames = {Path(l['path']).name for l in debug_logs}
-        
-        for log in parent_logs:
-            if log['name'] not in debug_filenames:
-                found_logs.append(log)
+        found_logs.extend(parent_logs)
         
 
 
@@ -187,8 +173,8 @@ class LogSearcher:
                 for line in f:
                     if pattern in line:
                         matches.append(line.strip())
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: Could not read {file_path}: {e}", file=sys.stderr)
         return matches
 
     def _find_logs_in_dir(self, target_dir: Path, sn: str, descriptions: List[str] = []) -> List[Dict[str, str]]:
@@ -202,14 +188,10 @@ class LogSearcher:
                 if not f.is_file():
                     continue
                 
-                # Check for "led" or "SUMMARY" in name (case-insensitive or sensitive? User said "led" and "SUMMARY")
-                # Usually best to match exact what user said, but maybe ignore case? 
-                # User request: "filter logs with led and SUMMARY in the name"
-                # Let's check both as substrings
-                if "led" in f.name or "SUMMARY" in f.name:
+                if any(fragment in f.name for fragment in self.exclude_name_fragments):
                     continue
                     
-                if sn in f.name:
+                if re.search(r'(?<![A-Za-z0-9])' + re.escape(sn) + r'(?![A-Za-z0-9])', f.name):
                     raw_logs.append(f)
             
             # Sort by modification time (oldest first)
@@ -232,10 +214,10 @@ class LogSearcher:
                         best_desc = desc
                         break
                 
-                # 2. Fallback: Chronological mapping
-                # If we couldn't match by name, and we have descriptions, map by index
-                if not best_desc and idx < len(descriptions):
-                     best_desc = descriptions[idx]
+                # 2. Fallback: Chronological mapping only when counts align exactly,
+                # otherwise we'd assign the wrong description to the wrong file.
+                if not best_desc and len(descriptions) == len(raw_logs):
+                    best_desc = descriptions[idx]
 
                 results.append({
                     "path": str(f.absolute()),
@@ -244,6 +226,6 @@ class LogSearcher:
                     "tags": tags,
                     "description": best_desc
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: Could not list files in {target_dir}: {e}", file=sys.stderr)
         return results

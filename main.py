@@ -33,6 +33,7 @@ def main():
     parser.add_argument("sn", nargs='?', help="Serial Number to search for")
     parser.add_argument("--pn", help="Directly specify Product Number (skip lookup)")
     parser.add_argument("--path", action='append', help="Add custom search path")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed search info")
     
     args = parser.parse_args()
     
@@ -41,7 +42,13 @@ def main():
     # Initial values from args
     sn = args.sn
     pn = args.pn
+    verbose = args.verbose
     search_paths = args.path if args.path else DEFAULT_PATHS
+
+    if verbose:
+        print(f"Search paths ({len(search_paths)}):")
+        for p in search_paths:
+            print(f"  {p}")
 
     while True:
         # 1. Acquire SN
@@ -75,9 +82,15 @@ def main():
                 print(f"Resolved PN: {current_pn}")
         
         # 3. Search
-        print(f"Searching in: {len(search_paths)} directories...")
+        if verbose:
+            print(f"Searching for SN={sn}, PN={current_pn} in {len(search_paths)} directories...")
+        else:
+            print(f"Searching in: {len(search_paths)} directories...")
         searcher = LogSearcher(search_paths)
         logs = searcher.search(current_pn, sn)
+
+        if verbose:
+            print(f"Found {len(logs)} log(s).")
         
         display_results(logs)
         

@@ -1,6 +1,7 @@
 import sys
 import os
-from subprocess import call
+import re
+import subprocess
 from typing import List, Dict
 
 class Colors:
@@ -13,6 +14,35 @@ class Colors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+
+def format_description(raw: str) -> str:
+    """
+    Reformats a raw .mlnx description line for readability.
+
+    Raw:  2026|03|26|13.27.08:SN[612X7520230219]:ULT[N/A]:00:30:42:Fail:4-722-8357:ALL_VOLTAGE-...
+    Out:  2026-03-26  13:27:08  SN[612X7520230219]  00:30:42  Fail  4-722-8357  ALL_VOLTAGE-...
+    """
+    m = re.match(
+        r'(\d{4})\|(\d{2})\|(\d{2})\|(\d{2})\.(\d{2})\.(\d{2})'  # date + time
+        r':SN\[([^\]]+)\]'                                          # SN[...]
+        r':ULT\[[^\]]*\]'                                           # ULT[...] — dropped
+        r':(\d{2}:\d{2}:\d{2})'                                    # duration
+        r':([^:]+)'                                                  # status
+        r':([^:]+)'                                                  # code
+        r':(.*)',                                                    # remainder
+        raw.strip()
+    )
+    if not m:
+        return raw  # unrecognised format — return as-is
+
+    year, month, day, hh, mm, ss, sn, duration, status, code, rest = m.groups()
+    date = f"{year}-{month}-{day}"
+    time = f"{hh}:{mm}:{ss}"
+    parts = [date, time, f"SN[{sn}]", duration, status, code]
+    if rest.strip():
+        parts.append(rest.strip())
+    return "  ".join(parts)
+
 
 def print_header(text: str):
     print(f"{Colors.BOLD}{Colors.OKBLUE}=== {text} ==={Colors.ENDC}")
@@ -51,7 +81,7 @@ def display_results(logs: List[Dict[str, str]]):
         print(f"    {Colors.WARNING}Path:{Colors.ENDC} {log['path']}")
         
         if log.get('description'):
-            print(f"    {Colors.OKBLUE}Info:{Colors.ENDC} {log['description']}")
+            print(f"    {Colors.OKBLUE}Info:{Colors.ENDC} {format_description(log['description'])}")
         
         # Add a separator blank line
         print()
@@ -81,11 +111,10 @@ def view_file(filepath: str):
     
     # Check if 'less' is available (common on Linux)
     try:
-        call(['less', '-r', filepath])
+        subprocess.call(['less', '-r', filepath])
     except FileNotFoundError:
         # Fallback for systems without less (e.g. Windows testing)
-        # Use 'more' on windows or just cat it
         if os.name == 'nt':
-             os.system(f'more "{filepath}"')
+            subprocess.call(['more', filepath], shell=False)
         else:
-             os.system(f'cat "{filepath}"')
+            subprocess.call(['cat', filepath])
