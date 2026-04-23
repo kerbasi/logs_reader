@@ -1,8 +1,8 @@
 import sys
-import gzip
+import shutil
 import threading
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
+from tkinter import ttk, messagebox
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent))
@@ -17,6 +17,29 @@ DEFAULT_PATHS = [
     "/usr/flexfs/lion_cub/log/dbg",
     "/usr/flexfs/lion_cub/log/dbg/customization",
 ]
+
+
+def _open_in_terminal(filepath: str):
+    import subprocess
+    if sys.platform == "win32":
+        subprocess.Popen(
+            ["cmd", "/c", f'more "{filepath}" && pause'],
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+        )
+        return
+    # Try common Linux terminal emulators
+    for term in ("xterm", "gnome-terminal", "konsole", "xfce4-terminal",
+                 "lxterminal", "urxvt", "alacritty", "kitty"):
+        if shutil.which(term):
+            if term in ("gnome-terminal",):
+                subprocess.Popen([term, "--", "less", "-r", filepath])
+            elif term in ("alacritty", "kitty"):
+                subprocess.Popen([term, "-e", "less", "-r", filepath])
+            else:
+                subprocess.Popen([term, "-e", f"less -r {filepath}"])
+            return
+    raise RuntimeError(
+        "No terminal emulator found. Install xterm or set $TERM.")
 
 
 def _color_tag_for_log(log: dict) -> str:
@@ -46,8 +69,7 @@ class LogReaderApp:
     def _build_ui(self):
         root = self.root
         root.columnconfigure(0, weight=1)
-        root.rowconfigure(1, weight=2)  # results zone
-        root.rowconfigure(2, weight=3)  # viewer zone
+        root.rowconfigure(1, weight=1)  # results zone
 
         # ── Zone 1: Search panel ──────────────────────────────────────
         search_frame = ttk.LabelFrame(root, text="Search", padding=6)
@@ -150,43 +172,12 @@ class LogReaderApp:
 
         self.results_text.bind("<Button-1>", self._on_result_click)
 
-        # ── Zone 3: File viewer ───────────────────────────────────────
-        viewer_frame = ttk.LabelFrame(root, text="File Viewer", padding=6)
-        viewer_frame.grid(
-            row=2, column=0, sticky="NSEW", padx=6, pady=(2, 2))
-        viewer_frame.columnconfigure(0, weight=1)
-        viewer_frame.rowconfigure(1, weight=1)
-
-        self.viewer_label = ttk.Label(viewer_frame, text="No file loaded.")
-        self.viewer_label.grid(row=0, column=0, sticky="W")
-
-        viewer_text_frame = ttk.Frame(viewer_frame)
-        viewer_text_frame.grid(row=1, column=0, sticky="NSEW")
-        viewer_text_frame.columnconfigure(0, weight=1)
-        viewer_text_frame.rowconfigure(0, weight=1)
-
-        self.viewer_text = tk.Text(
-            viewer_text_frame, state="disabled", wrap="none",
-            font=("TkFixedFont", 9))
-        self.viewer_text.grid(row=0, column=0, sticky="NSEW")
-
-        view_vsb = ttk.Scrollbar(
-            viewer_text_frame, orient="vertical",
-            command=self.viewer_text.yview)
-        view_vsb.grid(row=0, column=1, sticky="NS")
-        view_hsb = ttk.Scrollbar(
-            viewer_text_frame, orient="horizontal",
-            command=self.viewer_text.xview)
-        view_hsb.grid(row=1, column=0, sticky="EW")
-        self.viewer_text.configure(
-            yscrollcommand=view_vsb.set, xscrollcommand=view_hsb.set)
-
         # ── Status bar ────────────────────────────────────────────────
         self.status_var = tk.StringVar(value="Ready.")
         status_bar = ttk.Label(
             root, textvariable=self.status_var,
             relief="sunken", anchor="w", padding=(4, 2))
-        status_bar.grid(row=3, column=0, sticky="EW", padx=0, pady=0)
+        status_bar.grid(row=2, column=0, sticky="EW", padx=0, pady=0)
 
     # ------------------------------------------------------------------
     # Path management
@@ -374,37 +365,12 @@ class LogReaderApp:
     def _load_file(self, idx: int):
         if idx < 0 or idx >= len(self._logs):
             return
-        log = self._logs[idx]
-        filepath = log["path"]
-        self.viewer_label.configure(text=filepath)
-        self.status_var.set(f"Loading: {filepath}")
-
+        filepath = self._logs[idx]["path"]
         try:
-            content = self._read_file(filepath)
+            _open_in_terminal(filepath)
+            self.status_var.set(f"Opened: {Path(filepath).name}")
         except Exception as exc:
-            self.viewer_text.configure(state="normal")
-            self.viewer_text.delete("1.0", tk.END)
-            self.viewer_text.insert(tk.END, f"Error reading file:\n{exc}")
-            self.viewer_text.configure(state="disabled")
-            self.status_var.set(f"Error reading file: {exc}")
-            return
-
-        self.viewer_text.configure(state="normal")
-        self.viewer_text.delete("1.0", tk.END)
-        self.viewer_text.insert(tk.END, content)
-        self.viewer_text.configure(state="disabled")
-        self.viewer_text.yview_moveto(0)
-        self.status_var.set(f"Loaded: {Path(filepath).name}")
-
-    @staticmethod
-    def _read_file(filepath: str) -> str:
-        try:
-            with gzip.open(filepath, "rt", encoding="utf-8", errors="replace") as f:
-                return f.read()
-        except (gzip.BadGzipFile, OSError):
-            pass
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-            return f.read()
+            self.status_var.set(f"Error opening file: {exc}")
 
 
 if __name__ == "__main__":
