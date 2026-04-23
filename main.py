@@ -32,7 +32,7 @@ def main():
     parser = argparse.ArgumentParser(description="Log Reader for FT/Customization Logs")
     parser.add_argument("sn", nargs='?', help="Serial Number to search for")
     parser.add_argument("--pn", help="Directly specify Product Number (skip lookup)")
-    parser.add_argument("--path", action='append', help="Add custom search path")
+    parser.add_argument("--path", action='append', help="Add extra search path (appended to defaults)")
     parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed search info")
     
     args = parser.parse_args()
@@ -43,7 +43,7 @@ def main():
     sn = args.sn
     pn = args.pn
     verbose = args.verbose
-    search_paths = args.path if args.path else DEFAULT_PATHS
+    search_paths = DEFAULT_PATHS + (args.path or [])
 
     if verbose:
         print(f"Search paths ({len(search_paths)}):")
