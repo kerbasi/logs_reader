@@ -85,22 +85,24 @@ def main():
             print(f"Searching for SN={sn}, PN={current_pn} in {len(search_paths)} directories...")
         else:
             print(f"Searching in: {len(search_paths)} directories...")
-        searcher = LogSearcher(search_paths)
-        logs = searcher.search(current_pn, sn)
-
-        ict_searcher = ICTLogSearcher()
-        ict_logs = ict_searcher.search(sn)
-
-        all_logs = logs + ict_logs
-
-        if verbose:
-            print(f"Found {len(logs)} standard log(s), {len(ict_logs)} ICT log(s).")
-
-        if ict_logs:
+        if current_pn.upper().startswith("SFG"):
+            all_logs = ICTLogSearcher().search(sn)
+            if verbose:
+                print(f"PN starts with SFG — ICT search only. Found {len(all_logs)} log(s).")
             print_header("ICT Logs")
-            display_results(ict_logs)
-
-        display_results(logs)
+            display_results(all_logs)
+        else:
+            all_logs = LogSearcher(search_paths).search(current_pn, sn)
+            if verbose:
+                print(f"Found {len(all_logs)} standard log(s).")
+            if all_logs:
+                display_results(all_logs)
+            else:
+                all_logs = ICTLogSearcher().search(sn)
+                if verbose:
+                    print(f"No standard logs — ICT fallback. Found {len(all_logs)} log(s).")
+                print_header("ICT Logs")
+                display_results(all_logs)
 
         # 4. Interact
         if all_logs:

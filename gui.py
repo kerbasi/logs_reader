@@ -254,10 +254,12 @@ class LogReaderApp:
             return
 
         try:
-            searcher = LogSearcher(paths)
-            logs = searcher.search(resolved_pn, sn)
-            ict_logs = ICTLogSearcher().search(sn)
-            logs = logs + ict_logs
+            if resolved_pn.upper().startswith("SFG"):
+                logs = ICTLogSearcher().search(sn)
+            else:
+                logs = LogSearcher(paths).search(resolved_pn, sn)
+                if not logs:
+                    logs = ICTLogSearcher().search(sn)
             # Sort newest first (mirrors console display_results)
             logs.sort(key=lambda x: x["date"], reverse=True)
         except Exception as exc:
