@@ -6,13 +6,12 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent / "src"))
 
 try:
-    from src.core import ProductResolver, LogSearcher
-    from src.interface import print_header, print_error, display_results, select_log, view_file
-except ImportError  as e:
-    # If running directly from src folder or structure is different
+    from src.core import ProductResolver, LogSearcher, ICTLogSearcher
+    from src.interface import print_header, print_error, display_results, select_log, view_file, open_in_libreoffice
+except ImportError as e:
     try:
-        from core import ProductResolver, LogSearcher
-        from interface import print_header, print_error, display_results, select_log, view_file
+        from core import ProductResolver, LogSearcher, ICTLogSearcher
+        from interface import print_header, print_error, display_results, select_log, view_file, open_in_libreoffice
     except ImportError:
         print(f"Critical Error: Could not import modules: {e}")
         sys.exit(1)
@@ -89,28 +88,38 @@ def main():
         searcher = LogSearcher(search_paths)
         logs = searcher.search(current_pn, sn)
 
+        ict_searcher = ICTLogSearcher()
+        ict_logs = ict_searcher.search(sn)
+
+        all_logs = logs + ict_logs
+
         if verbose:
-            print(f"Found {len(logs)} log(s).")
-        
+            print(f"Found {len(logs)} standard log(s), {len(ict_logs)} ICT log(s).")
+
+        if ict_logs:
+            print_header("ICT Logs")
+            display_results(ict_logs)
+
         display_results(logs)
-        
+
         # 4. Interact
-        if logs:
+        if all_logs:
             while True:
-                choice_idx = select_log(logs)
-                
-                if choice_idx == -1: # Quit
+                choice_idx = select_log(all_logs)
+
+                if choice_idx == -1:
                     sys.exit(0)
-                elif choice_idx == -2: # Search Again
-                    # Reset parameters for next loop
+                elif choice_idx == -2:
                     sn = None
-                    pn = None # Clear PN to re-resolve or re-ask
+                    pn = None
                     print("\n" + "-"*30 + "\n")
-                    break # Break inner loop, returns to top of while True
+                    break
                 else:
-                    # View File
-                    view_file(logs[choice_idx]['path'])
-                    # Loop continues, allowing viewing another file
+                    selected_path = all_logs[choice_idx]['path']
+                    if selected_path.lower().endswith('.csv'):
+                        open_in_libreoffice(selected_path)
+                    else:
+                        view_file(selected_path)
         else:
             # If no logs found, ask what to do
             retry = input("Search again? (y/n): ").strip().lower()

@@ -6,7 +6,7 @@ from tkinter import ttk, messagebox
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent))
-from src.core import ProductResolver, LogSearcher
+from src.core import ProductResolver, LogSearcher, ICTLogSearcher
 from src.interface import format_description
 
 DEFAULT_PATHS = [
@@ -166,6 +166,8 @@ class LogReaderApp:
         self.results_text.tag_configure(
             "neutral_tag", foreground="#1a6fbf")
         self.results_text.tag_configure(
+            "ict_tag", foreground="#00AAAA")
+        self.results_text.tag_configure(
             "meta_tag", foreground="#666666")
         self.results_text.tag_configure(
             "clickable", font=("TkFixedFont", 9, "underline"))
@@ -254,6 +256,8 @@ class LogReaderApp:
         try:
             searcher = LogSearcher(paths)
             logs = searcher.search(resolved_pn, sn)
+            ict_logs = ICTLogSearcher().search(sn)
+            logs = logs + ict_logs
             # Sort newest first (mirrors console display_results)
             logs.sort(key=lambda x: x["date"], reverse=True)
         except Exception as exc:
@@ -329,11 +333,14 @@ class LogReaderApp:
 
         # Tag for each log index stored as "row_N"
         for idx, log in enumerate(logs):
-            color_tag = _color_tag_for_log(log)
+            is_ict = "ICT" in log.get("tags", [])
+            color_tag = "ict_tag" if is_ict else _color_tag_for_log(log)
             line_tag = f"row_{idx}"
             start = self.results_text.index(tk.INSERT)
 
-            header = f"[{idx + 1}] {log['name']}\n"
+            machine = log["tags"][1] if is_ict and len(log.get("tags", [])) > 1 else ""
+            display_name = f"[ICT] [{machine}] {log['name']}" if is_ict else log['name']
+            header = f"[{idx + 1}] {display_name}\n"
             self.results_text.insert(tk.END, header, (color_tag, "clickable", line_tag))
 
             path_line = f"    Path: {log['path']}\n"
@@ -362,12 +369,27 @@ class LogReaderApp:
     # File viewer
     # ------------------------------------------------------------------
 
+    def _open_in_libreoffice(self, filepath):
+        import subprocess
+        try:
+            subprocess.Popen([
+                "libreoffice", "--calc",
+                '--infilter=Text CSV (StarCalc):44,34,0,1,1',
+                filepath,
+            ])
+        except FileNotFoundError:
+            self.status_var.set("LibreOffice not found, opening in terminal...")
+            _open_in_terminal(filepath)
+
     def _load_file(self, idx: int):
         if idx < 0 or idx >= len(self._logs):
             return
         filepath = self._logs[idx]["path"]
         try:
-            _open_in_terminal(filepath)
+            if filepath.lower().endswith(".csv"):
+                self._open_in_libreoffice(filepath)
+            else:
+                _open_in_terminal(filepath)
             self.status_var.set(f"Opened: {Path(filepath).name}")
         except Exception as exc:
             self.status_var.set(f"Error opening file: {exc}")

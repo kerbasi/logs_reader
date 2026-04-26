@@ -6,6 +6,41 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Optional
 
+class ICTLogSearcher:
+    BASE_PATH = "/usr/flexfs/ict_tri_logs"
+    MACHINES = [f"TRI{n:03d}" for n in range(401, 422)]
+
+    def search(self, sn: str) -> List[Dict]:
+        results = []
+        base = Path(self.BASE_PATH)
+        for machine in self.MACHINES:
+            machine_dir = base / machine
+            try:
+                if not machine_dir.is_dir():
+                    continue
+                for month_dir in machine_dir.iterdir():
+                    if not month_dir.is_dir() or not month_dir.name.isdigit() or len(month_dir.name) != 6:
+                        continue
+                    try:
+                        for f in month_dir.iterdir():
+                            if not f.is_file() or not f.name.lower().endswith(".csv"):
+                                continue
+                            if re.search(r'(?<![A-Za-z0-9])' + re.escape(sn) + r'(?![A-Za-z0-9])', f.name):
+                                results.append({
+                                    "path": str(f.absolute()),
+                                    "name": f.name,
+                                    "date": f.stat().st_mtime,
+                                    "tags": ["ICT", machine],
+                                    "description": f"{machine} / {month_dir.name}",
+                                })
+                    except OSError:
+                        continue
+            except OSError:
+                continue
+        results.sort(key=lambda x: x["date"])
+        return results
+
+
 class ProductResolver:
     """
     Resolves Serial Number (SN) to Product Part Number (PN) 

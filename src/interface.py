@@ -108,7 +108,7 @@ def view_file(filepath: str):
     Opens file in 'less' or suitable viewer.
     """
     print_header(f"Opening {filepath}")
-    
+
     # Check if 'less' is available (common on Linux)
     try:
         subprocess.call(['less', '-r', filepath])
@@ -118,3 +118,15 @@ def view_file(filepath: str):
             subprocess.call(['more', filepath], shell=False)
         else:
             subprocess.call(['cat', filepath])
+
+
+def open_in_libreoffice(filepath: str):
+    try:
+        subprocess.Popen([
+            "libreoffice", "--calc",
+            '--infilter=Text CSV (StarCalc):44,34,0,1,1',
+            filepath,
+        ])
+    except FileNotFoundError:
+        print(f"Error: LibreOffice not found. Falling back to terminal viewer.")
+        view_file(filepath)
