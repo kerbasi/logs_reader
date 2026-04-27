@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-INDEX_PATH = "/tmp/ict_log_index.json"
+INDEX_PATH = str(Path(__file__).parent.parent / "index" / "ict_log_index.json")
 HOT_REBUILD_INTERVAL = 30
 FULL_REBUILD_INTERVAL = 86400
 
@@ -34,10 +34,12 @@ class ICTIndex:
         self._index_path = index_path
         self._data: Dict[str, List[str]] = {}
         self._lock = threading.RLock()
+        self._ready = threading.Event()
         self._last_full_build: float = 0.0
         self._load()
         if not self._data:
             self._build(months=_hot_months())
+        self._ready.set()
         self._start_background()
 
     def _load(self) -> None:
@@ -63,6 +65,7 @@ class ICTIndex:
         if is_full:
             payload["_full_built_at"] = datetime.now().isoformat()
         try:
+            os.makedirs(os.path.dirname(self._index_path), exist_ok=True)
             with open(self._index_path, "w") as f:
                 json.dump(payload, f)
         except OSError:
@@ -122,6 +125,7 @@ class ICTIndex:
                 self._build(months=_hot_months())
 
     def search(self, sn: str) -> List[Dict]:
+        self._ready.wait()
         pattern = re.compile(r"(?<![A-Za-z0-9])" + re.escape(sn) + r"(?![A-Za-z0-9])")
         with self._lock:
             snapshot = dict(self._data)
