@@ -26,6 +26,29 @@ def _hot_months() -> List[str]:
     return [_yyyymm(prev), _yyyymm(now)]
 
 
+def _parse_oper_id(path: Path) -> Optional[str]:
+    """Return OperID value from CSV header row + the data row below it."""
+    try:
+        with open(path, "r", errors="ignore") as f:
+            header: Optional[list] = None
+            for i, line in enumerate(f):
+                if i >= 30:
+                    break
+                cols = [c.strip().strip('"') for c in line.strip().split(",")]
+                # Normalize to bare alphanumeric uppercase so OperID / OPER_ID / oper_id all match
+                norm = [re.sub(r'[^A-Z0-9]', '', c.upper()) for c in cols]
+                if header is None:
+                    if "OPERID" in norm:
+                        header = norm
+                else:
+                    idx = header.index("OPERID")
+                    val = cols[idx].strip() if idx < len(cols) else ""
+                    return val or None
+    except OSError:
+        pass
+    return None
+
+
 class ICTIndex:
     BASE_PATH = "/usr/flexfs/ict_tri_logs"
     MACHINES = [f"TRI{n:03d}" for n in range(401, 422)]
@@ -140,12 +163,16 @@ class ICTIndex:
                         mtime = full_path.stat().st_mtime
                     except OSError:
                         mtime = 0.0
+                    dt_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M") if mtime else ""
+                    oper_id = _parse_oper_id(full_path)
                     results.append({
                         "path": str(full_path),
                         "name": fname,
                         "date": mtime,
                         "tags": ["ICT", machine],
                         "description": f"{machine} / {month}",
+                        "datetime": dt_str,
+                        "oper_id": oper_id,
                     })
 
         results.sort(key=lambda x: x["date"])
