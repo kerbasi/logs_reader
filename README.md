@@ -1,14 +1,15 @@
 # Logs Reader
 
-A lightweight, zero-dependency Python tool for searching and viewing test log files. Supports both a GUI and an interactive CLI. Replaces the legacy `find_log.py` shell script.
+A lightweight Python tool for searching and viewing test log files on the Lion Cub line. Supports a GUI and an interactive CLI. Replaces the legacy `find_log.py` shell script.
 
 ## Features
 
-- **GUI** (`gui.py`) — tkinter interface with color-coded results, clickable rows, threaded search
+- **GUI** (`gui.py`) — tkinter interface with color-coded PASS/FAIL results, clickable rows, threaded search, operator name display
 - **CLI** (`main.py`) — colored interactive terminal interface
-- **FT / Customization logs** — traverses `PN/YYYYMM/` or `PN/YYYY/MM/` structures, reads `.mlnx` index files
-- **ICT logs** — scans `TRI401`–`TRI421` machine folders, opens results in LibreOffice Calc
-- **SN → PN resolution** — automatic lookup via internal QMS3 service; falls back to manual entry
+- **FT / Customization logs** — traverses `PN/YYYYMM/` structures, reads `.mlnx` index files
+- **ICT logs** — JSON index over `TRI401`–`TRI421` machine folders with background re-indexing; opens results in LibreOffice Calc
+- **SN → PN resolution** — automatic lookup via QMS3 service; falls back to manual entry
+- **Operator names** — maps OperID numbers to names via `_RUNNERS` dict in `gui.py`
 - **No dependencies** — Python standard library only
 
 ## Requirements
@@ -21,6 +22,7 @@ A lightweight, zero-dependency Python tool for searching and viewing test log fi
 ```bash
 git clone <repo-url> logs_reader
 cd logs_reader
+chmod +x gui.py   # enables double-click launch from Nautilus
 ```
 
 ## Usage
@@ -29,24 +31,20 @@ cd logs_reader
 
 ```bash
 python3 gui.py
+# or double-click gui.py in Nautilus (after chmod +x)
 ```
 
-Enter a Serial Number, optionally a Product Number, and click **Search**. Click any result to open it. ICT CSV results open in LibreOffice Calc; all others open in a terminal viewer.
+Enter a Serial Number, optionally a Product Number, and click **Search** (or press Enter). Click any result row to open it. ICT CSV files open in LibreOffice Calc; all others open in a terminal viewer.
+
+Results are color-coded: green = PASS, red = FAIL, blue = other FT logs, teal = ICT logs.
 
 ### CLI
 
 ```bash
-# Auto-resolve PN via QMS3, then search
-python3 main.py <SN>
-
-# Skip QMS3 lookup
-python3 main.py <SN> --pn <PN>
-
-# Append extra search directories (defaults always included)
-python3 main.py <SN> --path /mnt/custom/logs
-
-# Show path and match-count details
-python3 main.py <SN> --verbose
+python3 main.py <SN>               # auto-resolve PN via QMS3
+python3 main.py <SN> --pn <PN>    # skip QMS3 lookup
+python3 main.py <SN> --path /mnt/custom/logs   # extra search directory
+python3 main.py <SN> --verbose     # show path and match-count details
 ```
 
 ## Log Types
@@ -55,12 +53,12 @@ python3 main.py <SN> --verbose
 
 ```
 <root>/<PN>/<YYYYMM>/
-    <PN>.mlnx          ← index file, one line per test run
+    <PN>.mlnx          ← index file, one entry per test run
     DEBUG/
         *<SN>*         ← actual log files
 ```
 
-Both `YYYYMM` (flat) and `YYYY/MM` (nested) layouts are supported.
+Both `YYYYMM` (flat) and `YYYY/MM` (nested) month layouts are supported.
 
 Default search roots:
 
@@ -69,7 +67,7 @@ Default search roots:
 | `/usr/flexfs/lion_cub/log/ft` | Functional test |
 | `/usr/flexfs/lion_cub/log` | General |
 | `/usr/flexfs/lion_cub/log/customization` | Customization |
-| `/usr/flexfs/lion_cub/log/dbg/ft` | Debug functional test |
+| `/usr/flexfs/lion_cub/log/dbg/ft` | Debug FT |
 | `/usr/flexfs/lion_cub/log/dbg` | Debug |
 | `/usr/flexfs/lion_cub/log/dbg/customization` | Debug customization |
 
@@ -84,15 +82,35 @@ YYYY|MM|DD|HH.MM.SS:SN[<sn>]:ULT[<ult>]:<duration>:<status>:<code>:<detail>
 /usr/flexfs/ict_tri_logs/<MACHINE>/<YYYYMM>/*_<SN>_*.csv
 ```
 
-`MACHINE` is `TRI401` through `TRI421`. No PN is required — search is by SN only. Matching files open directly in LibreOffice Calc via:
+`MACHINE` is `TRI401` through `TRI421`. Search is by SN only (no PN required).
+
+A JSON index is built in the background on first run and kept warm with incremental re-indexing (hot months every 30 s, full rebuild daily). Search is blocked until the index is ready.
+
+Matching files open in LibreOffice Calc:
 
 ```bash
-libreoffice --calc --infilter="Text CSV (StarCalc):44,34,0,1,1" <file>
+libreoffice --calc --norestore \
+  --infilter="Text - txt - csv (StarCalc):44,34,76,1" <file>
 ```
 
 ## Configuration
 
+### QMS3
+
 The QMS3 service URL is read from `/usr/flexfs/qms3/site.ws`. If absent (e.g. on a dev machine), PN resolution is skipped and the tool prompts for manual input.
+
+### Operator names
+
+Edit `_RUNNERS` in `gui.py` to map OperID numbers to human-readable names:
+
+```python
+_RUNNERS: Dict[str, str] = {
+    "12345": "John Doe",
+    "67890": "Jane Smith",
+}
+```
+
+When an OperID matches an entry, the name is shown in the result info line instead of the raw number.
 
 ## Tests
 
