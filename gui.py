@@ -541,6 +541,18 @@ class LogReaderApp:
                 oper_id = log["oper_id"]
                 oper_label = _RUNNERS.get(oper_id, oper_id)
                 info_parts.append(f"OPER: {oper_label}")
+            if is_ict:
+                try:
+                    size = Path(log["path"]).stat().st_size
+                    if size >= 1_048_576:
+                        size_str = f"{size / 1_048_576:.1f} MB"
+                    elif size >= 1024:
+                        size_str = f"{size / 1024:.1f} KB"
+                    else:
+                        size_str = f"{size} B"
+                    info_parts.append(f"Size: {size_str}")
+                except OSError:
+                    pass
             if info_parts:
                 info_line = f"    Info: {'  |  '.join(info_parts)}\n"
                 self.results_text.insert(tk.END, info_line, ("meta_tag",))
