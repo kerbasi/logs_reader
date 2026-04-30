@@ -1,4 +1,3 @@
-import os
 import sys
 import shutil
 import threading
@@ -9,6 +8,10 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 from src.core import ProductResolver, LogSearcher, ICTLogSearcher
 from src.interface import format_description
+
+_RUNNERS: dict[str, str] = {
+    # "12345": "John Doe",
+}
 
 DEFAULT_PATHS = [
     "/usr/flexfs/lion_cub/log/ft",
@@ -56,104 +59,6 @@ def _color_tag_for_log(log: dict) -> str:
         return "fail_tag"
     return "neutral_tag"
 
-
-# ── LibreOffice macro: open CSV and scroll to last row ───────────────────────
-
-_LO_MACRO_XBA = """\
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
-<script:module xmlns:script="http://openoffice.org/2000/script" script:name="Module1" script:language="StarBasic">
-Sub OpenNext()
-    Dim sTmp As String
-    Dim sPath As String
-    Dim iFile As Integer
-
-    sTmp = "/tmp/logreader_open.txt"
-    If Not FileExists(sTmp) Then Exit Sub
-
-    iFile = FreeFile()
-    Open sTmp For Input As #iFile
-    Line Input #iFile, sPath
-    Close #iFile
-
-    Dim sUrl As String
-    sUrl = ConvertToURL(Trim(sPath))
-
-    Dim oProps(0) As New com.sun.star.beans.PropertyValue
-    oProps(0).Name = "FilterName"
-    oProps(0).Value = "Text - txt - csv (StarCalc)"
-
-    Dim oDoc As Object
-    oDoc = StarDesktop.loadComponentFromURL(sUrl, "_blank", 0, oProps())
-    If IsNull(oDoc) Or IsEmpty(oDoc) Then Exit Sub
-
-    Dim oSheet As Object
-    oSheet = oDoc.Sheets.getByIndex(0)
-    Dim oCursor As Object
-    oCursor = oSheet.createCursor()
-    oCursor.gotoEndOfUsedArea(True)
-
-    Dim nLastRow As Long
-    nLastRow = oCursor.getRangeAddress().EndRow
-    oDoc.getCurrentController().gotoCell(oSheet.getCellByPosition(0, nLastRow), False)
-End Sub
-</script:module>
-"""
-
-_LO_SCRIPT_XLB = """\
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE library:library PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "library.dtd">
-<library:library xmlns:library="http://openoffice.org/2000/library" library:name="LogReader" library:readonly="false" library:passwordprotected="false">
- <library:element library:name="Module1"/>
-</library:library>
-"""
-
-_lo_macro_ready = False
-
-
-def _lo_basic_dir() -> Path:
-    if sys.platform == "win32":
-        return Path(os.environ.get("APPDATA", "~")).expanduser() / "LibreOffice" / "4" / "user" / "basic"
-    return Path.home() / ".config" / "libreoffice" / "4" / "user" / "basic"
-
-
-def _register_lo_library(main_xlb: Path, lib_name: str) -> None:
-    if main_xlb.exists():
-        text = main_xlb.read_text(encoding="utf-8")
-        if lib_name in text:
-            return
-        text = text.replace(
-            "</library:libraries>",
-            f' <library:library library:name="{lib_name}" library:link="false"/>\n</library:libraries>',
-        )
-        main_xlb.write_text(text, encoding="utf-8")
-    else:
-        main_xlb.parent.mkdir(parents=True, exist_ok=True)
-        main_xlb.write_text(
-            '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<!DOCTYPE library:libraries PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "libraries.dtd">\n'
-            '<library:libraries xmlns:library="http://openoffice.org/2000/library">\n'
-            f' <library:library library:name="{lib_name}" library:link="false"/>\n'
-            "</library:libraries>\n",
-            encoding="utf-8",
-        )
-
-
-def _ensure_lo_macro() -> bool:
-    """Install the LogReader Basic macro library into the LO user directory."""
-    global _lo_macro_ready
-    if _lo_macro_ready:
-        return True
-    try:
-        lib_dir = _lo_basic_dir() / "LogReader"
-        lib_dir.mkdir(parents=True, exist_ok=True)
-        (lib_dir / "Module1.xba").write_text(_LO_MACRO_XBA, encoding="utf-8")
-        (lib_dir / "script.xlb").write_text(_LO_SCRIPT_XLB, encoding="utf-8")
-        _register_lo_library(_lo_basic_dir() / "script.xlb", "LogReader")
-        _lo_macro_ready = True
-        return True
-    except OSError:
-        return False
 
 
 class LogReaderApp:
@@ -458,7 +363,9 @@ class LogReaderApp:
             if log.get("datetime"):
                 info_parts.append(log["datetime"])
             if log.get("oper_id"):
-                info_parts.append(f"OPER_ID: {log['oper_id']}")
+                oper_id = log["oper_id"]
+                oper_label = _RUNNERS.get(oper_id, oper_id)
+                info_parts.append(f"OPER: {oper_label}")
             if info_parts:
                 info_line = f"    Info: {'  |  '.join(info_parts)}\n"
                 self.results_text.insert(tk.END, info_line, ("meta_tag",))
@@ -483,17 +390,10 @@ class LogReaderApp:
 
     def _open_in_libreoffice(self, filepath):
         import subprocess
-        if sys.platform != "win32" and _ensure_lo_macro():
-            try:
-                Path("/tmp/logreader_open.txt").write_text(filepath, encoding="utf-8")
-                subprocess.Popen(["libreoffice", "macro:///LogReader.Module1.OpenNext"])
-                return
-            except (OSError, FileNotFoundError):
-                pass
         try:
             subprocess.Popen([
-                "libreoffice", "--calc",
-                '--infilter=Text CSV (StarCalc):44,34,0,1,1',
+                "libreoffice", "--calc", "--norestore",
+                "--infilter=Text - txt - csv (StarCalc):44,34,76,1",
                 filepath,
             ])
         except FileNotFoundError:
