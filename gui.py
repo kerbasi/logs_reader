@@ -66,6 +66,159 @@ def _color_tag_for_log(log: dict) -> str:
     return "neutral_tag"
 
 
+_PALETTE = {
+    "bg":          "#1e1f2e",
+    "bg_widget":   "#272838",
+    "bg_input":    "#1a1b2a",
+    "accent":      "#7c8cf8",
+    "text":        "#e2e4f0",
+    "text_dim":    "#5c5f7a",
+    "pass_col":    "#4ade80",
+    "fail_col":    "#f87171",
+    "ict_col":     "#38bdf8",
+    "neutral_col": "#a5b4fc",
+    "border":      "#3a3c52",
+    "btn":         "#4338ca",
+    "btn_active":  "#5046e5",
+    "status_bg":   "#12131f",
+    "select_bg":   "#4338ca",
+}
+
+_FONT_UI   = None
+_FONT_MONO = None
+
+
+def _apply_theme(root):
+    global _FONT_UI, _FONT_MONO
+
+    from tkinter import font as tkfont
+
+    available = set(tkfont.families())
+
+    _ui_name = "TkDefaultFont"
+    for candidate in ["Ubuntu", "DejaVu Sans", "Liberation Sans", "Segoe UI", "Helvetica"]:
+        if candidate in available:
+            _ui_name = candidate
+            break
+    _FONT_UI = (_ui_name, 10)
+
+    _mono_name = "TkFixedFont"
+    for candidate in ["DejaVu Sans Mono", "Liberation Mono", "Consolas", "Courier New"]:
+        if candidate in available:
+            _mono_name = candidate
+            break
+    _FONT_MONO = (_mono_name, 9)
+
+    style = ttk.Style(root)
+    style.theme_use("clam")
+
+    root.configure(bg=_PALETTE["bg"])
+
+    style.configure(".",
+        background=_PALETTE["bg"],
+        foreground=_PALETTE["text"],
+        font=_FONT_UI,
+        bordercolor=_PALETTE["border"],
+        darkcolor=_PALETTE["bg"],
+        lightcolor=_PALETTE["bg"],
+        troughcolor=_PALETTE["bg"],
+        focuscolor=_PALETTE["accent"],
+    )
+
+    style.configure("TFrame",
+        background=_PALETTE["bg"],
+    )
+
+    style.configure("TLabelframe",
+        background=_PALETTE["bg"],
+        bordercolor=_PALETTE["border"],
+        relief="flat",
+    )
+
+    style.configure("TLabelframe.Label",
+        background=_PALETTE["bg"],
+        foreground=_PALETTE["accent"],
+        font=_FONT_UI,
+    )
+
+    style.configure("TButton",
+        background=_PALETTE["btn"],
+        foreground=_PALETTE["text"],
+        borderwidth=0,
+        relief="flat",
+        padding=(14, 7),
+        font=_FONT_UI,
+        focuscolor=_PALETTE["accent"],
+    )
+    style.map("TButton",
+        background=[
+            ("active",   _PALETTE["btn_active"]),
+            ("pressed",  _PALETTE["btn_active"]),
+            ("disabled", _PALETTE["bg_widget"]),
+        ],
+        foreground=[
+            ("disabled", _PALETTE["text_dim"]),
+        ],
+        relief=[
+            ("pressed", "flat"),
+        ],
+    )
+
+    style.configure("TEntry",
+        fieldbackground=_PALETTE["bg_input"],
+        foreground=_PALETTE["text"],
+        insertcolor=_PALETTE["text"],
+        bordercolor=_PALETTE["border"],
+        lightcolor=_PALETTE["bg_input"],
+        darkcolor=_PALETTE["bg_input"],
+        selectbackground=_PALETTE["select_bg"],
+        selectforeground=_PALETTE["text"],
+        padding=(4, 4),
+        font=_FONT_UI,
+    )
+    style.map("TEntry",
+        bordercolor=[
+            ("focus", _PALETTE["accent"]),
+        ],
+        lightcolor=[
+            ("focus", _PALETTE["accent"]),
+        ],
+    )
+
+    style.configure("TLabel",
+        background=_PALETTE["bg"],
+        foreground=_PALETTE["text"],
+        font=_FONT_UI,
+    )
+
+    style.configure("TScrollbar",
+        background=_PALETTE["bg_widget"],
+        troughcolor=_PALETTE["bg"],
+        bordercolor=_PALETTE["bg"],
+        arrowcolor=_PALETTE["bg"],
+        arrowsize=0,
+        relief="flat",
+        width=8,
+    )
+    style.map("TScrollbar",
+        background=[
+            ("active", _PALETTE["border"]),
+        ],
+    )
+
+    style.configure("Status.TLabel",
+        background=_PALETTE["status_bg"],
+        foreground=_PALETTE["text_dim"],
+        font=(_FONT_UI[0], _FONT_UI[1] - 1),
+        anchor="w",
+    )
+
+    style.configure("Dim.TLabel",
+        background=_PALETTE["bg"],
+        foreground=_PALETTE["text_dim"],
+        font=(_FONT_UI[0], _FONT_UI[1] - 1),
+    )
+
 
 class LogReaderApp:
     def __init__(self, root: tk.Tk):
@@ -76,6 +229,7 @@ class LogReaderApp:
         self._logs: list = []
         self._extra_paths: list = list(DEFAULT_PATHS)
 
+        _apply_theme(root)
         self._build_ui()
 
     # ------------------------------------------------------------------
@@ -124,9 +278,16 @@ class LogReaderApp:
             row=2, column=0, columnspan=4, sticky="EW", pady=(4, 0))
         lb_frame.columnconfigure(0, weight=1)
 
-        self.path_listbox = tk.Listbox(lb_frame, height=3,
-                                       selectmode=tk.SINGLE,
-                                       activestyle="dotbox")
+        self.path_listbox = tk.Listbox(
+            lb_frame, height=3, selectmode=tk.SINGLE, activestyle="dotbox",
+            bg=_PALETTE["bg_input"], fg=_PALETTE["text"],
+            selectbackground=_PALETTE["select_bg"],
+            selectforeground=_PALETTE["text"],
+            borderwidth=0, highlightthickness=1,
+            highlightcolor=_PALETTE["border"],
+            highlightbackground=_PALETTE["border"],
+            relief="flat",
+        )
         self.path_listbox.grid(row=0, column=0, sticky="EW")
         lb_scroll = ttk.Scrollbar(
             lb_frame, orient="vertical", command=self.path_listbox.yview)
@@ -150,7 +311,7 @@ class LogReaderApp:
         results_frame.rowconfigure(1, weight=1)
 
         self.results_count_label = ttk.Label(
-            results_frame, text="No results yet.")
+            results_frame, text="No results yet.", style="Dim.TLabel")
         self.results_count_label.grid(row=0, column=0, sticky="W")
 
         res_text_frame = ttk.Frame(results_frame)
@@ -160,7 +321,14 @@ class LogReaderApp:
 
         self.results_text = tk.Text(
             res_text_frame, state="disabled", wrap="none",
-            cursor="arrow", font=("TkFixedFont", 9))
+            cursor="arrow", font=_FONT_MONO,
+            bg=_PALETTE["bg_widget"], fg=_PALETTE["text"],
+            insertbackground=_PALETTE["text"],
+            selectbackground=_PALETTE["select_bg"],
+            selectforeground=_PALETTE["text"],
+            borderwidth=0, highlightthickness=0,
+            relief="flat", padx=8, pady=6,
+        )
         self.results_text.grid(row=0, column=0, sticky="NSEW")
 
         res_vsb = ttk.Scrollbar(
@@ -176,17 +344,17 @@ class LogReaderApp:
 
         # Colour tags
         self.results_text.tag_configure(
-            "pass_tag", foreground="green")
+            "pass_tag", foreground=_PALETTE["pass_col"])
         self.results_text.tag_configure(
-            "fail_tag", foreground="red")
+            "fail_tag", foreground=_PALETTE["fail_col"])
         self.results_text.tag_configure(
-            "neutral_tag", foreground="#1a6fbf")
+            "neutral_tag", foreground=_PALETTE["neutral_col"])
         self.results_text.tag_configure(
-            "ict_tag", foreground="#00AAAA")
+            "ict_tag", foreground=_PALETTE["ict_col"])
         self.results_text.tag_configure(
-            "meta_tag", foreground="#666666")
+            "meta_tag", foreground=_PALETTE["text_dim"])
         self.results_text.tag_configure(
-            "clickable", font=("TkFixedFont", 9, "underline"))
+            "clickable", font=(_FONT_MONO[0], _FONT_MONO[1], "underline"))
 
         self.results_text.bind("<Button-1>", self._on_result_click)
 
@@ -194,7 +362,7 @@ class LogReaderApp:
         self.status_var = tk.StringVar(value="Ready.")
         status_bar = ttk.Label(
             root, textvariable=self.status_var,
-            relief="sunken", anchor="w", padding=(4, 2))
+            style="Status.TLabel", anchor="w", padding=(6, 3))
         status_bar.grid(row=2, column=0, sticky="EW", padx=0, pady=0)
 
     # ------------------------------------------------------------------
@@ -287,6 +455,7 @@ class LogReaderApp:
 
     def _ask_manual_pn(self, sn: str):
         dialog = tk.Toplevel(self.root)
+        dialog.configure(bg=_PALETTE["bg"])
         dialog.title("Product Number Required")
         dialog.resizable(False, False)
         dialog.grab_set()
