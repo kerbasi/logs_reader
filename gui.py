@@ -1,16 +1,22 @@
+#!/usr/bin/env python3
 import sys
 import shutil
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 from pathlib import Path
+from typing import Dict
 
 sys.path.append(str(Path(__file__).parent))
 from src.core import ProductResolver, LogSearcher, ICTLogSearcher
 from src.interface import format_description
 
-_RUNNERS: dict[str, str] = {
-    # "12345": "John Doe",
+_RUNNERS: Dict[str, str] = {
+    "19476": "Daniel Suima",
+    "20992": "Oleg Karonin",
+    "21465": "Dan Trievus",
+    "19455": "Maxim Malabaev",
+    "5590": "Vladimir Volik",
 }
 
 DEFAULT_PATHS = [
