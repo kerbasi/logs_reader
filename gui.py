@@ -72,7 +72,7 @@ _PALETTE = {
     "bg_input":    "#1a1b2a",
     "accent":      "#7c8cf8",
     "text":        "#e2e4f0",
-    "text_dim":    "#5c5f7a",
+    "text_dim":    "#c8cad8",
     "pass_col":    "#4ade80",
     "fail_col":    "#f87171",
     "ict_col":     "#38bdf8",
@@ -100,14 +100,14 @@ def _apply_theme(root):
         if candidate in available:
             _ui_name = candidate
             break
-    _FONT_UI = (_ui_name, 10)
+    _FONT_UI = (_ui_name, 13)
 
     _mono_name = "TkFixedFont"
     for candidate in ["DejaVu Sans Mono", "Liberation Mono", "Consolas", "Courier New"]:
         if candidate in available:
             _mono_name = candidate
             break
-    _FONT_MONO = (_mono_name, 9)
+    _FONT_MONO = (_mono_name, 12)
 
     style = ttk.Style(root)
     style.theme_use("clam")
