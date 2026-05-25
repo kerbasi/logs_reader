@@ -171,6 +171,33 @@ class TestICTIndex(unittest.TestCase):
             idx2 = ICTIndex(index_path=str(self.index_file))
             self.assertIn("SFG-TEST", idx2._pn_index)
 
+    def test_search_month_filter(self):
+        for machine in ("TRI401",):
+            for month in ("202503", "202504", "202505"):
+                d = self.root / machine / month
+                d.mkdir(parents=True)
+                (d / f"log_{machine}_{month}.csv").write_text("Col\nval\n")
+
+        with patch("src.ict_index.HOT_REBUILD_INTERVAL", 99999), \
+             patch("src.ict_index.FULL_REBUILD_INTERVAL", 99999), \
+             patch.object(ICTIndex, "BASE_PATH", str(self.root)):
+
+            idx = ICTIndex(index_path=str(self.index_file))
+            idx._build(months=None)
+
+            all_results = idx.search("TRI401")
+            self.assertEqual(len(all_results), 3)
+
+            filtered = idx.search("TRI401", from_month="202504", to_month="202504")
+            self.assertEqual(len(filtered), 1)
+            self.assertIn("202504", filtered[0]["path"])
+
+            from_only = idx.search("TRI401", from_month="202504")
+            self.assertEqual(len(from_only), 2)
+
+            to_only = idx.search("TRI401", to_month="202504")
+            self.assertEqual(len(to_only), 2)
+
     def test_hot_rebuild_deduplicates_pn_index(self):
         machine = "TRI401"
         month = "202605"

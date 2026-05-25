@@ -190,7 +190,7 @@ class ICTIndex:
             else:
                 self._build(months=_hot_months())
 
-    def search(self, sn: str) -> List[Dict]:
+    def search(self, sn: str, from_month: Optional[str] = None, to_month: Optional[str] = None) -> List[Dict]:
         self._ready.wait()
         pattern = re.compile(r"(?<![A-Za-z0-9])" + re.escape(sn) + r"(?![A-Za-z0-9])")
         with self._lock:
@@ -199,6 +199,10 @@ class ICTIndex:
         results = []
         for key, files in snapshot.items():
             machine, month = key.split("/", 1)
+            if from_month and month < from_month:
+                continue
+            if to_month and month > to_month:
+                continue
             for fname in files:
                 if pattern.search(fname):
                     full_path = Path(self.BASE_PATH) / machine / month / fname
@@ -221,7 +225,7 @@ class ICTIndex:
         results.sort(key=lambda x: x["date"])
         return results
 
-    def search_by_pn(self, pn: str) -> List[Dict]:
+    def search_by_pn(self, pn: str, from_month: Optional[str] = None, to_month: Optional[str] = None) -> List[Dict]:
         self._ready.wait()
         with self._lock:
             rel_paths = list(self._pn_index.get(pn, []))
@@ -232,6 +236,10 @@ class ICTIndex:
             if len(parts) != 3:
                 continue
             machine, month, fname = parts
+            if from_month and month < from_month:
+                continue
+            if to_month and month > to_month:
+                continue
             full_path = Path(self.BASE_PATH) / machine / month / fname
             try:
                 mtime = full_path.stat().st_mtime

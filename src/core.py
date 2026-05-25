@@ -10,11 +10,11 @@ from .ict_index import get_index
 
 
 class ICTLogSearcher:
-    def search(self, sn: str) -> List[Dict]:
-        return get_index().search(sn)
+    def search(self, sn: str, from_month: str = None, to_month: str = None) -> List[Dict]:
+        return get_index().search(sn, from_month=from_month, to_month=to_month)
 
-    def search_by_pn(self, pn: str) -> List[Dict]:
-        return get_index().search_by_pn(pn)
+    def search_by_pn(self, pn: str, from_month: str = None, to_month: str = None) -> List[Dict]:
+        return get_index().search_by_pn(pn, from_month=from_month, to_month=to_month)
 
 
 class ProductResolver:
@@ -92,7 +92,7 @@ class LogSearcher:
         self.root_dirs = root_dirs
         self.exclude_name_fragments = exclude_name_fragments if exclude_name_fragments is not None else ["led"]
 
-    def search(self, pn: str, sn: str) -> List[Dict[str, str]]:
+    def search(self, pn: str, sn: str, from_month: str = None, to_month: str = None) -> List[Dict[str, str]]:
         """
         scans root_dirs for:
           root_dir/PN/YEAR/MONTH/PN.mlnx (log file?) (original script line 86)
@@ -138,12 +138,22 @@ class LogSearcher:
 
                 # Case 1: Child is YYYY (e.g. 2024) -> Look for MM inside
                 if child.name.isdigit() and len(child.name) == 4:
-                     for month_dir in child.iterdir():
-                        if month_dir.is_dir():
-                            self._check_dir_for_logs(month_dir, pn, sn, found_logs)
-                
+                    for month_dir in child.iterdir():
+                        if not month_dir.is_dir():
+                            continue
+                        yyyymm = child.name + month_dir.name.zfill(2)
+                        if from_month and yyyymm < from_month:
+                            continue
+                        if to_month and yyyymm > to_month:
+                            continue
+                        self._check_dir_for_logs(month_dir, pn, sn, found_logs)
+
                 # Case 2: Child is YYYYMM (e.g. 202401)
                 elif child.name.isdigit() and len(child.name) == 6:
+                    if from_month and child.name < from_month:
+                        continue
+                    if to_month and child.name > to_month:
+                        continue
                     self._check_dir_for_logs(child, pn, sn, found_logs)
         
         return found_logs

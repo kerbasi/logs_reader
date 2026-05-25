@@ -3,9 +3,10 @@ import sys
 import shutil
 import threading
 import tkinter as tk
+from datetime import datetime
 from tkinter import ttk, messagebox
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 sys.path.append(str(Path(__file__).parent))
 from src.core import ProductResolver, LogSearcher, ICTLogSearcher
@@ -27,6 +28,14 @@ DEFAULT_PATHS = [
     "/usr/flexfs/lion_cub/log/dbg",
     "/usr/flexfs/lion_cub/log/dbg/customization",
 ]
+
+
+def _parse_month(s: str) -> Optional[str]:
+    """Convert 'YYYY-MM' or 'YYYYMM' to 'YYYYMM'. Returns None if blank or invalid."""
+    s = s.strip().replace("-", "")
+    if len(s) == 6 and s.isdigit():
+        return s
+    return None
 
 
 def _merge_dedup(a: list, b: list) -> list:
@@ -287,24 +296,42 @@ class LogReaderApp:
         self.pn_entry = ttk.Entry(search_frame)
         self.pn_entry.grid(row=0, column=3, sticky="EW")
 
-        # Row 1 — extra path entry + buttons
-        ttk.Label(search_frame, text="Extra path:").grid(
+        # Row 1 — Period filter
+        _cur_month = datetime.now().strftime("%Y-%m")
+        ttk.Label(search_frame, text="Period:").grid(
             row=1, column=0, sticky="W", pady=(6, 0), padx=(0, 4))
+        period_frame = ttk.Frame(search_frame)
+        period_frame.grid(row=1, column=1, columnspan=3, sticky="W", pady=(6, 0))
+        ttk.Label(period_frame, text="From:").pack(side="left", padx=(0, 4))
+        self.from_month_entry = ttk.Entry(period_frame, width=10)
+        self.from_month_entry.insert(0, _cur_month)
+        self.from_month_entry.pack(side="left")
+        ttk.Label(period_frame, text="To:", style="Dim.TLabel").pack(
+            side="left", padx=(10, 4))
+        self.to_month_entry = ttk.Entry(period_frame, width=10)
+        self.to_month_entry.insert(0, _cur_month)
+        self.to_month_entry.pack(side="left")
+        ttk.Label(period_frame, text="  (YYYY-MM)", style="Dim.TLabel").pack(
+            side="left", padx=(6, 0))
+
+        # Row 2 — extra path entry + buttons
+        ttk.Label(search_frame, text="Extra path:").grid(
+            row=2, column=0, sticky="W", pady=(6, 0), padx=(0, 4))
         self.path_entry = ttk.Entry(search_frame)
         self.path_entry.grid(
-            row=1, column=1, sticky="EW", pady=(6, 0), padx=(0, 8))
+            row=2, column=1, sticky="EW", pady=(6, 0), padx=(0, 8))
 
         btn_frame = ttk.Frame(search_frame)
-        btn_frame.grid(row=1, column=2, columnspan=2, sticky="W", pady=(6, 0))
+        btn_frame.grid(row=2, column=2, columnspan=2, sticky="W", pady=(6, 0))
         ttk.Button(btn_frame, text="Add Path", command=self._add_path).pack(
             side="left", padx=(0, 4))
         ttk.Button(btn_frame, text="Remove", command=self._remove_path).pack(
             side="left")
 
-        # Row 2 — path listbox
+        # Row 3 — path listbox
         lb_frame = ttk.Frame(search_frame)
         lb_frame.grid(
-            row=2, column=0, columnspan=4, sticky="EW", pady=(4, 0))
+            row=3, column=0, columnspan=4, sticky="EW", pady=(4, 0))
         lb_frame.columnconfigure(0, weight=1)
 
         self.path_listbox = tk.Listbox(
@@ -325,11 +352,11 @@ class LogReaderApp:
         for p in self._extra_paths:
             self.path_listbox.insert(tk.END, p)
 
-        # Row 3 — Search button
+        # Row 4 — Search button
         self.search_btn = ttk.Button(
             search_frame, text="Search", command=self._start_search)
         self.search_btn.grid(
-            row=3, column=0, columnspan=4, sticky="EW", pady=(8, 0))
+            row=4, column=0, columnspan=4, sticky="EW", pady=(8, 0))
         self.sn_entry.bind("<Return>", lambda _e: self._start_search())
 
         # ── Zone 2: Results list ──────────────────────────────────────
@@ -439,22 +466,29 @@ class LogReaderApp:
             self.status_var.set("Error: enter Serial Number or Product Number.")
             return
 
+        from_month = _parse_month(self.from_month_entry.get())
+        to_month   = _parse_month(self.to_month_entry.get())
+
+        if from_month and to_month and from_month > to_month:
+            self.status_var.set("Error: 'From' month must not be after 'To' month.")
+            return
+
         self.search_btn.configure(state="disabled")
         self.status_var.set("Searching…")
         self._clear_results()
 
         t = threading.Thread(
             target=self._search_worker,
-            args=(sn, pn, list(self._extra_paths)),
+            args=(sn, pn, list(self._extra_paths), from_month, to_month),
             daemon=True,
         )
         t.start()
 
-    def _search_worker(self, sn, pn_hint, paths: list):
+    def _search_worker(self, sn, pn_hint, paths: list, from_month=None, to_month=None):
         # PN-only → ICT filename search, no QMS3 lookup needed
         if not sn:
             try:
-                logs = ICTLogSearcher().search(pn_hint)
+                logs = ICTLogSearcher().search(pn_hint, from_month=from_month, to_month=to_month)
                 logs.sort(key=lambda x: x["date"], reverse=True)
             except Exception as exc:
                 self.root.after(
@@ -495,12 +529,11 @@ class LogReaderApp:
         try:
             ict = ICTLogSearcher()
             if resolved_pn.upper().startswith("SFG"):
-                logs = ict.search(sn)
+                logs = ict.search(sn, from_month=from_month, to_month=to_month)
             else:
-                logs = LogSearcher(paths).search(resolved_pn, sn)
+                logs = LogSearcher(paths).search(resolved_pn, sn, from_month=from_month, to_month=to_month)
                 if not logs:
-                    logs = ict.search(sn)
-            # Sort newest first (mirrors console display_results)
+                    logs = ict.search(sn, from_month=from_month, to_month=to_month)
             logs.sort(key=lambda x: x["date"], reverse=True)
         except Exception as exc:
             self.root.after(
