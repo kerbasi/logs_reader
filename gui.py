@@ -29,6 +29,16 @@ DEFAULT_PATHS = [
 ]
 
 
+def _merge_dedup(a: list, b: list) -> list:
+    seen: set = set()
+    result = []
+    for item in a + b:
+        if item["path"] not in seen:
+            seen.add(item["path"])
+            result.append(item)
+    return result
+
+
 def _open_in_terminal(filepath: str):
     import subprocess
     if sys.platform == "win32":
@@ -438,12 +448,13 @@ class LogReaderApp:
             return
 
         try:
+            ict = ICTLogSearcher()
             if resolved_pn.upper().startswith("SFG"):
-                logs = ICTLogSearcher().search(sn)
+                logs = _merge_dedup(ict.search(sn), ict.search_by_pn(resolved_pn))
             else:
                 logs = LogSearcher(paths).search(resolved_pn, sn)
                 if not logs:
-                    logs = ICTLogSearcher().search(sn)
+                    logs = _merge_dedup(ict.search(sn), ict.search_by_pn(resolved_pn))
             # Sort newest first (mirrors console display_results)
             logs.sort(key=lambda x: x["date"], reverse=True)
         except Exception as exc:

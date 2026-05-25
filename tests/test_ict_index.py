@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.ict_index import _parse_oper_id, ICTIndex, get_index
+from src.ict_index import _parse_oper_id, _parse_pn, ICTIndex, get_index
 
 
 class TestParseOperId(unittest.TestCase):
@@ -64,6 +64,38 @@ class TestParseOperId(unittest.TestCase):
         self.assertIsNone(val)
 
 
+class TestParsePn(unittest.TestCase):
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.dir_path = Path(self.test_dir)
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir)
+
+    def test_parse_pn_simple(self):
+        csv_file = self.dir_path / "test.csv"
+        csv_file.write_text("Col1,PN,Col3\nval1,SFG123,val3\n")
+        self.assertEqual(_parse_pn(csv_file), "SFG123")
+
+    def test_parse_pn_partno(self):
+        csv_file = self.dir_path / "test.csv"
+        csv_file.write_text("Col1,PartNo,Col3\nval1,SFG456,val3\n")
+        self.assertEqual(_parse_pn(csv_file), "SFG456")
+
+    def test_parse_pn_partnumber(self):
+        csv_file = self.dir_path / "test.csv"
+        csv_file.write_text("Col1,PartNumber,Col3\nval1,SFG789,val3\n")
+        self.assertEqual(_parse_pn(csv_file), "SFG789")
+
+    def test_parse_pn_missing(self):
+        csv_file = self.dir_path / "test.csv"
+        csv_file.write_text("Col1,Col2,Col3\nval1,val2,val3\n")
+        self.assertIsNone(_parse_pn(csv_file))
+
+    def test_parse_pn_nonexistent(self):
+        self.assertIsNone(_parse_pn(self.dir_path / "nope.csv"))
+
+
 class TestICTIndex(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
@@ -110,6 +142,53 @@ class TestICTIndex(unittest.TestCase):
             idx2 = ICTIndex(index_path=str(self.index_file))
             self.assertIn(f"{machine}/{month}", idx2._data)
             self.assertEqual(idx2._data[f"{machine}/{month}"], ["test_SN789.csv"])
+
+    def test_search_by_pn(self):
+        machine = "TRI401"
+        month = "202605"
+        log_dir = self.root / machine / month
+        log_dir.mkdir(parents=True)
+
+        log_file = log_dir / "test_SN789.csv"
+        log_file.write_text("Col1,PN,OperID\nval1,SFG-TEST,5590\n")
+
+        with patch("src.ict_index.HOT_REBUILD_INTERVAL", 99999), \
+             patch("src.ict_index.FULL_REBUILD_INTERVAL", 99999), \
+             patch.object(ICTIndex, "BASE_PATH", str(self.root)):
+
+            idx = ICTIndex(index_path=str(self.index_file))
+            idx._build(months=None)
+
+            results = idx.search_by_pn("SFG-TEST")
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0]["name"], "test_SN789.csv")
+            self.assertEqual(results[0]["tags"], ["ICT", machine])
+
+            results_none = idx.search_by_pn("SFG-NOPE")
+            self.assertEqual(len(results_none), 0)
+
+            # PN index persists to disk and reloads
+            idx2 = ICTIndex(index_path=str(self.index_file))
+            self.assertIn("SFG-TEST", idx2._pn_index)
+
+    def test_hot_rebuild_deduplicates_pn_index(self):
+        machine = "TRI401"
+        month = "202605"
+        log_dir = self.root / machine / month
+        log_dir.mkdir(parents=True)
+
+        (log_dir / "log1.csv").write_text("PN\nSFG-A\n")
+
+        with patch("src.ict_index.HOT_REBUILD_INTERVAL", 99999), \
+             patch("src.ict_index.FULL_REBUILD_INTERVAL", 99999), \
+             patch.object(ICTIndex, "BASE_PATH", str(self.root)):
+
+            idx = ICTIndex(index_path=str(self.index_file))
+            idx._build(months=[month])
+            idx._build(months=[month])  # second hot rebuild of same month
+
+            paths = idx._pn_index.get("SFG-A", [])
+            self.assertEqual(len(paths), 1, "hot rebuild must not duplicate PN entries")
 
 
 if __name__ == "__main__":

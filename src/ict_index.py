@@ -26,26 +26,47 @@ def _hot_months() -> List[str]:
     return [_yyyymm(prev), _yyyymm(now)]
 
 
-def _parse_oper_id(path: Path) -> Optional[str]:
-    """Return OperID value from CSV header row + the data row below it."""
+def _parse_csv_fields(path: Path, *field_names: str) -> Dict[str, Optional[str]]:
+    """Return values for requested fields from CSV header + first data row."""
+    result: Dict[str, Optional[str]] = {f: None for f in field_names}
+    targets = {re.sub(r'[^A-Z0-9]', '', f.upper()) for f in field_names}
+    norm_to_orig: Dict[str, str] = {
+        re.sub(r'[^A-Z0-9]', '', f.upper()): f for f in field_names
+    }
     try:
-        with open(path, "r", errors="ignore") as f:
+        with open(path, "r", errors="ignore") as fh:
             header: Optional[list] = None
-            for i, line in enumerate(f):
+            for i, line in enumerate(fh):
                 if i >= 30:
                     break
                 cols = [c.strip().strip('"') for c in line.strip().split(",")]
-                # Normalize to bare alphanumeric uppercase so OperID / OPER_ID / oper_id all match
                 norm = [re.sub(r'[^A-Z0-9]', '', c.upper()) for c in cols]
                 if header is None:
-                    if "OPERID" in norm:
+                    if targets & set(norm):
                         header = norm
                 else:
-                    idx = header.index("OPERID")
-                    val = cols[idx].strip() if idx < len(cols) else ""
-                    return val or None
+                    for t in targets:
+                        if t in header:
+                            idx = header.index(t)
+                            val = cols[idx].strip() if idx < len(cols) else ""
+                            result[norm_to_orig[t]] = val or None
+                    break
     except OSError:
         pass
+    return result
+
+
+def _parse_oper_id(path: Path) -> Optional[str]:
+    """Return OperID value from CSV header row + the data row below it."""
+    return _parse_csv_fields(path, "OperID")["OperID"]
+
+
+def _parse_pn(path: Path) -> Optional[str]:
+    """Return PN value from CSV header row + the data row below it."""
+    for candidate in ("PN", "PartNo", "PartNumber"):
+        val = _parse_csv_fields(path, candidate)[candidate]
+        if val:
+            return val
     return None
 
 
@@ -56,6 +77,7 @@ class ICTIndex:
     def __init__(self, index_path: str = INDEX_PATH):
         self._index_path = index_path
         self._data: Dict[str, List[str]] = {}
+        self._pn_index: Dict[str, List[str]] = {}
         self._lock = threading.RLock()
         self._ready = threading.Event()
         self._last_full_build: float = 0.0
@@ -73,6 +95,7 @@ class ICTIndex:
             return
         full_built_at = raw.pop("_full_built_at", None)
         raw.pop("_built_at", None)
+        pn_index = raw.pop("_pn_index", {})
         if full_built_at:
             try:
                 self._last_full_build = datetime.fromisoformat(full_built_at).timestamp()
@@ -80,10 +103,12 @@ class ICTIndex:
                 pass
         with self._lock:
             self._data = raw
+            self._pn_index = pn_index
 
     def _save(self, is_full: bool = False) -> None:
         with self._lock:
             payload = dict(self._data)
+            payload["_pn_index"] = dict(self._pn_index)
         payload["_built_at"] = datetime.now().isoformat()
         if is_full:
             payload["_full_built_at"] = datetime.now().isoformat()
@@ -101,7 +126,12 @@ class ICTIndex:
             files = [f.name for f in path.iterdir() if f.is_file() and f.name.lower().endswith(".csv")]
         except OSError:
             files = []
-        return key, files
+        pn_entries: Dict[str, List[str]] = {}
+        for fname in files:
+            pn = _parse_pn(path / fname)
+            if pn:
+                pn_entries.setdefault(pn, []).append(f"{key}/{fname}")
+        return key, files, pn_entries
 
     def _build(self, months: Optional[List[str]] = None) -> None:
         tasks = []
@@ -120,18 +150,31 @@ class ICTIndex:
                     tasks.append((machine, month))
 
         new_data: Dict[str, List[str]] = {}
+        new_pn_index: Dict[str, List[str]] = {}
         with ThreadPoolExecutor(max_workers=20) as executor:
             futures = {executor.submit(self._scan_machine_month, m, mo): (m, mo) for m, mo in tasks}
             for future in as_completed(futures):
-                key, files = future.result()
+                key, files, pn_entries = future.result()
                 new_data[key] = files
+                for pn, paths in pn_entries.items():
+                    new_pn_index.setdefault(pn, []).extend(paths)
 
         is_full = months is None
         with self._lock:
             if is_full:
                 self._data = new_data
+                self._pn_index = new_pn_index
             else:
+                rebuilt_keys = set(new_data.keys())
                 self._data.update(new_data)
+                # Remove stale PN entries for rebuilt months before re-adding
+                for pn in list(self._pn_index.keys()):
+                    self._pn_index[pn] = [
+                        p for p in self._pn_index[pn]
+                        if "/".join(p.split("/", 2)[:2]) not in rebuilt_keys
+                    ]
+                for pn, paths in new_pn_index.items():
+                    self._pn_index.setdefault(pn, []).extend(paths)
         self._save(is_full=is_full)
 
     def _start_background(self) -> None:
@@ -174,6 +217,37 @@ class ICTIndex:
                         "datetime": dt_str,
                         "oper_id": oper_id,
                     })
+
+        results.sort(key=lambda x: x["date"])
+        return results
+
+    def search_by_pn(self, pn: str) -> List[Dict]:
+        self._ready.wait()
+        with self._lock:
+            rel_paths = list(self._pn_index.get(pn, []))
+
+        results = []
+        for rel_path in rel_paths:
+            parts = rel_path.split("/", 2)
+            if len(parts) != 3:
+                continue
+            machine, month, fname = parts
+            full_path = Path(self.BASE_PATH) / machine / month / fname
+            try:
+                mtime = full_path.stat().st_mtime
+            except OSError:
+                mtime = 0.0
+            dt_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M") if mtime else ""
+            oper_id = _parse_oper_id(full_path)
+            results.append({
+                "path": str(full_path),
+                "name": fname,
+                "date": mtime,
+                "tags": ["ICT", machine],
+                "description": f"{machine} / {month}",
+                "datetime": dt_str,
+                "oper_id": oper_id,
+            })
 
         results.sort(key=lambda x: x["date"])
         return results

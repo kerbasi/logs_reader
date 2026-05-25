@@ -13,6 +13,9 @@ class ICTLogSearcher:
     def search(self, sn: str) -> List[Dict]:
         return get_index().search(sn)
 
+    def search_by_pn(self, pn: str) -> List[Dict]:
+        return get_index().search_by_pn(pn)
+
 
 class ProductResolver:
     """
