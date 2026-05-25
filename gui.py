@@ -282,7 +282,7 @@ class LogReaderApp:
         self.sn_entry = ttk.Entry(search_frame)
         self.sn_entry.grid(row=0, column=1, sticky="EW", padx=(0, 12))
 
-        ttk.Label(search_frame, text="Product Number (optional):").grid(
+        ttk.Label(search_frame, text="Product Number:").grid(
             row=0, column=2, sticky="W", padx=(0, 4))
         self.pn_entry = ttk.Entry(search_frame)
         self.pn_entry.grid(row=0, column=3, sticky="EW")
@@ -432,12 +432,12 @@ class LogReaderApp:
     # ------------------------------------------------------------------
 
     def _start_search(self):
-        sn = self.sn_entry.get().strip()
-        if not sn:
-            self.status_var.set("Error: Serial Number is required.")
-            return
-
+        sn = self.sn_entry.get().strip() or None
         pn = self.pn_entry.get().strip() or None
+
+        if not sn and not pn:
+            self.status_var.set("Error: enter Serial Number or Product Number.")
+            return
 
         self.search_btn.configure(state="disabled")
         self.status_var.set("Searching…")
@@ -450,14 +450,26 @@ class LogReaderApp:
         )
         t.start()
 
-    def _search_worker(self, sn: str, pn_hint, paths: list):
+    def _search_worker(self, sn, pn_hint, paths: list):
+        # PN-only → ICT filename search, no QMS3 lookup needed
+        if not sn:
+            try:
+                logs = ICTLogSearcher().search(pn_hint)
+                logs.sort(key=lambda x: x["date"], reverse=True)
+            except Exception as exc:
+                self.root.after(
+                    0, lambda: self._search_done([], f"Search error: {exc}"))
+                return
+            self.root.after(0, lambda: self._search_done(logs))
+            return
+
         resolved_pn = pn_hint
 
         if not resolved_pn:
             try:
                 resolver = ProductResolver()
                 resolved_pn = resolver.get_product_pn(sn)
-            except Exception as exc:
+            except Exception:
                 resolved_pn = None
 
         if not resolved_pn:
@@ -483,11 +495,11 @@ class LogReaderApp:
         try:
             ict = ICTLogSearcher()
             if resolved_pn.upper().startswith("SFG"):
-                logs = _merge_dedup(ict.search(sn), ict.search_by_pn(resolved_pn))
+                logs = ict.search(sn)
             else:
                 logs = LogSearcher(paths).search(resolved_pn, sn)
                 if not logs:
-                    logs = _merge_dedup(ict.search(sn), ict.search_by_pn(resolved_pn))
+                    logs = ict.search(sn)
             # Sort newest first (mirrors console display_results)
             logs.sort(key=lambda x: x["date"], reverse=True)
         except Exception as exc:
