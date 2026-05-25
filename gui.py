@@ -229,6 +229,23 @@ def _apply_theme(root):
         font=(_FONT_UI[0], _FONT_UI[1] - 1),
     )
 
+    style.configure("TCheckbutton",
+        background=_PALETTE["bg"],
+        foreground=_PALETTE["text"],
+        font=_FONT_UI,
+        focuscolor=_PALETTE["accent"],
+        indicatorrelief="flat",
+    )
+    style.map("TCheckbutton",
+        background=[("active", _PALETTE["bg"])],
+        foreground=[("active", _PALETTE["text"])],
+        indicatorcolor=[
+            ("selected", _PALETTE["accent"]),
+            ("active",   _PALETTE["bg_widget"]),
+            ("!selected", _PALETTE["bg_input"]),
+        ],
+    )
+
 
 class LogReaderApp:
     def __init__(self, root: tk.Tk):
@@ -238,6 +255,8 @@ class LogReaderApp:
 
         self._logs: list = []
         self._extra_paths: list = list(DEFAULT_PATHS)
+        self._show_pass = tk.BooleanVar(value=True)
+        self._show_fail = tk.BooleanVar(value=True)
 
         _apply_theme(root)
         self._build_ui()
@@ -320,9 +339,23 @@ class LogReaderApp:
         results_frame.columnconfigure(0, weight=1)
         results_frame.rowconfigure(1, weight=1)
 
+        # Row 0 — count label + filter checkboxes
+        header_frame = ttk.Frame(results_frame)
+        header_frame.grid(row=0, column=0, sticky="EW")
+        header_frame.columnconfigure(0, weight=1)
+
         self.results_count_label = ttk.Label(
-            results_frame, text="No results yet.", style="Dim.TLabel")
+            header_frame, text="No results yet.", style="Dim.TLabel")
         self.results_count_label.grid(row=0, column=0, sticky="W")
+
+        ttk.Checkbutton(
+            header_frame, text="Pass",
+            variable=self._show_pass, command=self._apply_filter,
+        ).grid(row=0, column=1, padx=(8, 0))
+        ttk.Checkbutton(
+            header_frame, text="Fail",
+            variable=self._show_fail, command=self._apply_filter,
+        ).grid(row=0, column=2, padx=(4, 0))
 
         res_text_frame = ttk.Frame(results_frame)
         res_text_frame.grid(row=1, column=0, sticky="NSEW")
@@ -504,15 +537,38 @@ class LogReaderApp:
             self.status_var.set(error_msg)
             return
         self._logs = logs
-        self._populate_results(logs)
         count = len(logs)
         self.status_var.set(
             f"Found {count} log{'s' if count != 1 else ''}." if count
             else "No logs found."
         )
-        self.results_count_label.configure(
-            text=f"{count} result{'s' if count != 1 else ''}" if count
-            else "No results.")
+        self._apply_filter()
+
+    def _apply_filter(self):
+        show_pass = self._show_pass.get()
+        show_fail = self._show_fail.get()
+
+        def _keep(log: dict) -> bool:
+            tag = _color_tag_for_log(log)
+            if tag == "pass_tag":
+                return show_pass
+            if tag == "fail_tag":
+                return show_fail
+            return True
+
+        filtered = [log for log in self._logs if _keep(log)]
+        self._populate_results(filtered)
+
+        total = len(self._logs)
+        shown = len(filtered)
+        if total == 0:
+            self.results_count_label.configure(text="No results.")
+        elif shown == total:
+            self.results_count_label.configure(
+                text=f"{total} result{'s' if total != 1 else ''}")
+        else:
+            self.results_count_label.configure(
+                text=f"{shown} of {total} result{'s' if total != 1 else ''}")
 
     # ------------------------------------------------------------------
     # Results display
