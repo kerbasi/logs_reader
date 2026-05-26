@@ -177,17 +177,6 @@ def _group_logs(logs: list) -> list:
     return result
 
 
-def _file_size_str(path: str) -> str:
-    try:
-        n = os.path.getsize(path)
-    except OSError:
-        return ""
-    for unit in ("B", "KB", "MB", "GB"):
-        if n < 1024:
-            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
-        n /= 1024
-    return f"{n:.1f} TB"
-
 
 def _build_info_line(log: dict) -> str:
     """Return formatted Info line text for a log entry."""
@@ -196,8 +185,7 @@ def _build_info_line(log: dict) -> str:
         oper_id = log.get("oper_id") or ""
         oper_name = _RUNNERS.get(oper_id, oper_id) if oper_id else ""
         desc = log.get("description") or ""
-        size = _file_size_str(log.get("path", ""))
-        parts = [p for p in (desc, size, f"Operator: {oper_name}" if oper_name else "") if p]
+        parts = [p for p in (desc, f"Operator: {oper_name}" if oper_name else "") if p]
         return "   |   ".join(parts)
     else:
         raw = log.get("description") or ""
