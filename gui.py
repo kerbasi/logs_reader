@@ -52,16 +52,24 @@ def _merge_dedup(a: list, b: list) -> list:
 _DATE_RE = re.compile(
     r'y(\d{4})\s*m(\d{2})\s*d(\d{2})\s+(\d{2})\.(\d{2})\.(\d{2})'
 )
+_DATE_RE2 = re.compile(
+    r'(\d{4})(\d{2})(\d{2})[_\s](\d{2})\.(\d{2})\.(\d{2})'
+)
 
 def _parse_filename_date(fname: str):
-    """Extract datetime from filename like 'y2026 m05 d10 14.45.53'."""
-    m = _DATE_RE.search(fname)
-    if m:
-        try:
-            return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)),
-                            int(m.group(4)), int(m.group(5)), int(m.group(6)))
-        except ValueError:
-            pass
+    """Extract datetime from filename.
+
+    Handles ICT format  'y2026 m05 d10 14.45.53'
+    and standard format '20260504_04.10.16'.
+    """
+    for pat in (_DATE_RE, _DATE_RE2):
+        m = pat.search(fname)
+        if m:
+            try:
+                return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                                int(m.group(4)), int(m.group(5)), int(m.group(6)))
+            except ValueError:
+                pass
     return None
 
 
@@ -73,16 +81,27 @@ def _open_in_terminal(filepath: str):
             creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
         return
-    # Try common Linux terminal emulators
     for term in ("xterm", "gnome-terminal", "konsole", "xfce4-terminal",
                  "lxterminal", "urxvt", "alacritty", "kitty"):
         if shutil.which(term):
-            if term in ("gnome-terminal",):
+            if term == "xterm":
+                subprocess.Popen([
+                    term,
+                    "-fa", "Monospace", "-fs", "13",
+                    "-bg", _PALETTE["bg"],
+                    "-fg", _PALETTE["text"],
+                    "-cr", _PALETTE["accent"],
+                    "-sl", "10000",
+                    "-geometry", "220x55",
+                    "-title", Path(filepath).name,
+                    "-e", "less", "-r", filepath,
+                ])
+            elif term == "gnome-terminal":
                 subprocess.Popen([term, "--", "less", "-r", filepath])
             elif term in ("alacritty", "kitty"):
                 subprocess.Popen([term, "-e", "less", "-r", filepath])
             else:
-                subprocess.Popen([term, "-e", f"less -r {filepath}"])
+                subprocess.Popen([term, "-e", f"less -r '{filepath}'"])
             return
     raise RuntimeError(
         "No terminal emulator found. Install xterm or set $TERM.")
@@ -102,22 +121,54 @@ def _color_tag_for_log(log: dict) -> str:
     return "neutral_tag"
 
 
+def _group_logs(logs: list) -> list:
+    """Group SUMMARY companions under their main log as (main, [children]) tuples."""
+    mains = []
+    summary_index: dict = {}
+    for log in logs:
+        if "SUMMARY" in log["name"].upper():
+            dt = _parse_filename_date(log["name"])
+            parent = str(Path(log["path"]).parent)
+            summary_index.setdefault((parent, dt), []).append(log)
+        else:
+            mains.append(log)
+
+    result = []
+    for main in mains:
+        dt = _parse_filename_date(main["name"])
+        key = (str(Path(main["path"]).parent), dt)
+        children = summary_index.pop(key, [])
+        result.append((main, children))
+
+    # Unmatched SUMMARY logs — append as standalone
+    for children_list in summary_index.values():
+        for s in children_list:
+            result.append((s, []))
+
+    return result
+
+
 _PALETTE = {
-    "bg":          "#1e1f2e",
-    "bg_widget":   "#272838",
-    "bg_input":    "#1a1b2a",
-    "accent":      "#7c8cf8",
-    "text":        "#e2e4f0",
-    "text_dim":    "#c8cad8",
-    "pass_col":    "#4ade80",
-    "fail_col":    "#f87171",
-    "ict_col":     "#38bdf8",
-    "neutral_col": "#a5b4fc",
-    "border":      "#3a3c52",
-    "btn":         "#4338ca",
-    "btn_active":  "#5046e5",
-    "status_bg":   "#12131f",
-    "select_bg":   "#4338ca",
+    "bg":                   "#18181B",   # app window bg (near-black)
+    "bg_widget":            "#27272A",   # panel / list bg
+    "bg_input":             "#1F1F23",   # entry field bg
+    "accent":               "#3B82F6",   # calm blue accent
+    "text":                 "#F4F4F5",   # primary text
+    "text_dim":             "#71717A",   # secondary text (paths, info)
+    "pass_col":             "#10B981",   # pass green
+    "fail_col":             "#F87171",   # fail red (soft)
+    "ict_col":              "#38BDF8",   # ICT sky-blue
+    "neutral_col":          "#94A3B8",   # neutral slate
+    "number_col":           "#06B6D4",   # teal for [n] result numbers
+    "border":               "#3F3F46",   # subtle border
+    "btn":                  "#2563EB",   # primary button (Search)
+    "btn_active":           "#1D4ED8",   # primary hover
+    "btn_secondary":        "#3F3F46",   # secondary button (Add Path)
+    "btn_secondary_active": "#52525B",
+    "btn_danger":           "#7F1D1D",   # danger button (Remove)
+    "btn_danger_active":    "#991B1B",
+    "status_bg":            "#09090B",   # status bar
+    "select_bg":            "#2563EB",
 }
 
 _FONT_UI   = None
@@ -161,22 +212,21 @@ def _apply_theme(root):
         focuscolor=_PALETTE["accent"],
     )
 
-    style.configure("TFrame",
-        background=_PALETTE["bg"],
-    )
+    style.configure("TFrame", background=_PALETTE["bg"])
 
     style.configure("TLabelframe",
         background=_PALETTE["bg"],
         bordercolor=_PALETTE["border"],
-        relief="flat",
+        relief="groove",
     )
-
     style.configure("TLabelframe.Label",
         background=_PALETTE["bg"],
         foreground=_PALETTE["accent"],
-        font=_FONT_UI,
+        font=(_FONT_UI[0], _FONT_UI[1] - 1),
+        padding=(4, 0),
     )
 
+    # ── Primary button (Search) ───────────────────────────────────────
     style.configure("TButton",
         background=_PALETTE["btn"],
         foreground=_PALETTE["text"],
@@ -192,12 +242,44 @@ def _apply_theme(root):
             ("pressed",  _PALETTE["btn_active"]),
             ("disabled", _PALETTE["bg_widget"]),
         ],
-        foreground=[
-            ("disabled", _PALETTE["text_dim"]),
+        foreground=[("disabled", _PALETTE["text_dim"])],
+        relief=[("pressed", "flat")],
+    )
+
+    # ── Secondary button (Add Path, ▶ toggle) ────────────────────────
+    style.configure("Secondary.TButton",
+        background=_PALETTE["btn_secondary"],
+        foreground=_PALETTE["text"],
+        borderwidth=0,
+        relief="flat",
+        padding=(10, 6),
+        font=_FONT_UI,
+        focuscolor=_PALETTE["accent"],
+    )
+    style.map("Secondary.TButton",
+        background=[
+            ("active",  _PALETTE["btn_secondary_active"]),
+            ("pressed", _PALETTE["btn_secondary_active"]),
         ],
-        relief=[
-            ("pressed", "flat"),
+        relief=[("pressed", "flat")],
+    )
+
+    # ── Danger button (Remove) ───────────────────────────────────────
+    style.configure("Danger.TButton",
+        background=_PALETTE["btn_danger"],
+        foreground=_PALETTE["text"],
+        borderwidth=0,
+        relief="flat",
+        padding=(10, 6),
+        font=_FONT_UI,
+        focuscolor=_PALETTE["accent"],
+    )
+    style.map("Danger.TButton",
+        background=[
+            ("active",  _PALETTE["btn_danger_active"]),
+            ("pressed", _PALETTE["btn_danger_active"]),
         ],
+        relief=[("pressed", "flat")],
     )
 
     style.configure("TEntry",
@@ -209,16 +291,12 @@ def _apply_theme(root):
         darkcolor=_PALETTE["bg_input"],
         selectbackground=_PALETTE["select_bg"],
         selectforeground=_PALETTE["text"],
-        padding=(4, 4),
+        padding=(5, 5),
         font=_FONT_UI,
     )
     style.map("TEntry",
-        bordercolor=[
-            ("focus", _PALETTE["accent"]),
-        ],
-        lightcolor=[
-            ("focus", _PALETTE["accent"]),
-        ],
+        bordercolor=[("focus", _PALETTE["accent"])],
+        lightcolor=[("focus", _PALETTE["accent"])],
     )
 
     style.configure("TLabel",
@@ -234,12 +312,10 @@ def _apply_theme(root):
         arrowcolor=_PALETTE["bg"],
         arrowsize=0,
         relief="flat",
-        width=8,
+        width=7,
     )
     style.map("TScrollbar",
-        background=[
-            ("active", _PALETTE["border"]),
-        ],
+        background=[("active", _PALETTE["border"])],
     )
 
     style.configure("Status.TLabel",
@@ -266,8 +342,8 @@ def _apply_theme(root):
         background=[("active", _PALETTE["bg"])],
         foreground=[("active", _PALETTE["text"])],
         indicatorcolor=[
-            ("selected", _PALETTE["accent"]),
-            ("active",   _PALETTE["bg_widget"]),
+            ("selected",  _PALETTE["accent"]),
+            ("active",    _PALETTE["bg_widget"]),
             ("!selected", _PALETTE["bg_input"]),
         ],
     )
@@ -283,8 +359,8 @@ def _apply_theme(root):
         background=[("active", _PALETTE["bg"])],
         foreground=[("active", _PALETTE["text"])],
         indicatorcolor=[
-            ("selected", _PALETTE["accent"]),
-            ("active",   _PALETTE["bg_widget"]),
+            ("selected",  _PALETTE["accent"]),
+            ("active",    _PALETTE["bg_widget"]),
             ("!selected", _PALETTE["bg_input"]),
         ],
     )
@@ -293,17 +369,18 @@ def _apply_theme(root):
         background=_PALETTE["bg_widget"],
         foreground=_PALETTE["text"],
         fieldbackground=_PALETTE["bg_widget"],
-        rowheight=22,
+        rowheight=24,
         borderwidth=0,
         relief="flat",
         font=_FONT_MONO,
     )
     style.configure("Treeview.Heading",
-        background=_PALETTE["bg"],
-        foreground=_PALETTE["text_dim"],
-        borderwidth=1,
+        background=_PALETTE["bg_input"],
+        foreground=_PALETTE["neutral_col"],
+        borderwidth=0,
         relief="flat",
         font=(_FONT_UI[0], _FONT_UI[1] - 1),
+        padding=(6, 4),
     )
     style.map("Treeview",
         background=[("selected", _PALETTE["select_bg"])],
@@ -311,6 +388,7 @@ def _apply_theme(root):
     )
     style.map("Treeview.Heading",
         background=[("active", _PALETTE["bg_widget"])],
+        foreground=[("active", _PALETTE["text"])],
         relief=[("active", "flat")],
     )
 
@@ -327,6 +405,7 @@ class LogReaderApp:
         self._show_fail = tk.BooleanVar(value=True)
         self._mode = tk.StringVar(value="sn")
         self._displayed_logs: list = []
+        self._iid_to_log: dict = {}
         self._sort_col: str = "date"
         self._sort_rev: bool = True
         self._paths_expanded = False
@@ -366,9 +445,23 @@ class LogReaderApp:
         entry_row.columnconfigure(1, weight=1)
         self._search_entry_label = ttk.Label(entry_row, text="Serial Number:", width=22)
         self._search_entry_label.grid(row=0, column=0, sticky="W", padx=(0, 4))
-        self.search_entry = ttk.Entry(entry_row)
+        self._search_var = tk.StringVar()
+        self.search_entry = ttk.Entry(entry_row, textvariable=self._search_var)
         self.search_entry.grid(row=0, column=1, sticky="EW")
         self.search_entry.bind("<Return>", lambda _e: self._start_search())
+
+        def _force_upper(*_):
+            val = self._search_var.get()
+            upper = val.upper()
+            if val != upper:
+                try:
+                    pos = self.search_entry.index(tk.INSERT)
+                    self._search_var.set(upper)
+                    self.search_entry.icursor(pos)
+                except Exception:
+                    self._search_var.set(upper)
+
+        self._search_var.trace_add("write", _force_upper)
 
         # Row 2 — Period filter (PN mode only; hidden initially)
         _cur_month = datetime.now().strftime("%Y-%m")
@@ -391,7 +484,7 @@ class LogReaderApp:
         self._paths_header.grid(row=2, column=0, columnspan=2, sticky="W", pady=(6, 0))
         self._paths_toggle_btn = ttk.Button(
             self._paths_header, text=self._paths_btn_text(),
-            command=self._toggle_paths, padding=(4, 2),
+            command=self._toggle_paths, style="Secondary.TButton",
         )
         self._paths_toggle_btn.pack(side="left")
 
@@ -404,8 +497,10 @@ class LogReaderApp:
         self.path_entry.grid(row=0, column=1, sticky="EW", padx=(0, 8))
         path_btn_frame = ttk.Frame(self._path_row)
         path_btn_frame.grid(row=0, column=2, sticky="W")
-        ttk.Button(path_btn_frame, text="Add", command=self._add_path).pack(side="left", padx=(0, 4))
-        ttk.Button(path_btn_frame, text="Remove", command=self._remove_path).pack(side="left")
+        ttk.Button(path_btn_frame, text="Add", command=self._add_path,
+                   style="Secondary.TButton").pack(side="left", padx=(0, 4))
+        ttk.Button(path_btn_frame, text="Remove", command=self._remove_path,
+                   style="Danger.TButton").pack(side="left")
         self._path_row.grid_remove()
 
         # Row 4 — Path listbox (SN mode only, collapsed by default)
@@ -465,23 +560,65 @@ class LogReaderApp:
             variable=self._show_fail, command=self._apply_filter,
         ).grid(row=0, column=2, padx=(4, 0))
 
-        tree_frame = ttk.Frame(results_frame)
-        tree_frame.grid(row=1, column=0, sticky="NSEW")
-        tree_frame.columnconfigure(0, weight=1)
-        tree_frame.rowconfigure(0, weight=1)
+        results_inner = ttk.Frame(results_frame)
+        results_inner.grid(row=1, column=0, sticky="NSEW")
+        results_inner.columnconfigure(0, weight=1)
+        results_inner.rowconfigure(0, weight=1)
+
+        # ── SN results: text widget (shown in SN mode) ─────────────────
+        self._sn_frame = ttk.Frame(results_inner)
+        self._sn_frame.grid(row=0, column=0, sticky="NSEW")
+        self._sn_frame.columnconfigure(0, weight=1)
+        self._sn_frame.rowconfigure(0, weight=1)
+
+        self._text = tk.Text(
+            self._sn_frame,
+            state="disabled",
+            wrap="none",
+            bg=_PALETTE["bg_widget"],
+            fg=_PALETTE["text"],
+            font=_FONT_MONO,
+            borderwidth=0,
+            highlightthickness=0,
+            selectbackground=_PALETTE["select_bg"],
+            selectforeground=_PALETTE["text"],
+            cursor="arrow",
+            padx=12,
+            pady=8,
+            spacing1=1,
+            spacing3=3,
+        )
+        self._text.grid(row=0, column=0, sticky="NSEW")
+        self._text.tag_configure("pass",    foreground=_PALETTE["pass_col"])
+        self._text.tag_configure("fail",    foreground=_PALETTE["fail_col"])
+        self._text.tag_configure("neutral", foreground=_PALETTE["neutral_col"])
+        self._text.tag_configure("dim",     foreground=_PALETTE["text_dim"])
+        self._text.tag_configure("number",  foreground=_PALETTE["number_col"])
+
+        sn_vsb = ttk.Scrollbar(self._sn_frame, orient="vertical", command=self._text.yview)
+        sn_vsb.grid(row=0, column=1, sticky="NS")
+        sn_hsb = ttk.Scrollbar(self._sn_frame, orient="horizontal", command=self._text.xview)
+        sn_hsb.grid(row=1, column=0, sticky="EW")
+        self._text.configure(yscrollcommand=sn_vsb.set, xscrollcommand=sn_hsb.set)
+
+        # ── ICT/PN results: treeview (shown in PN mode, hidden by default) ─
+        self._ict_frame = ttk.Frame(results_inner)
+        self._ict_frame.grid(row=0, column=0, sticky="NSEW")
+        self._ict_frame.columnconfigure(0, weight=1)
+        self._ict_frame.rowconfigure(0, weight=1)
+        self._ict_frame.grid_remove()
 
         self._tree = ttk.Treeview(
-            tree_frame,
+            self._ict_frame,
             columns=("name", "date", "machine", "oper"),
             show="headings",
             selectmode="browse",
         )
         self._tree.grid(row=0, column=0, sticky="NSEW")
-
-        self._tree.column("name",    width=380, stretch=True,  minwidth=150, anchor="w")
-        self._tree.column("date",    width=155, stretch=False, minwidth=120, anchor="w")
-        self._tree.column("machine", width=72,  stretch=False, minwidth=60,  anchor="w")
-        self._tree.column("oper",    width=130, stretch=False, minwidth=80,  anchor="w")
+        self._tree.column("name",    width=260, stretch=True,  minwidth=150, anchor="w")
+        self._tree.column("date",    width=170, stretch=False, minwidth=140, anchor="w")
+        self._tree.column("machine", width=80,  stretch=False, minwidth=60,  anchor="w")
+        self._tree.column("oper",    width=160, stretch=False, minwidth=80,  anchor="w")
 
         for col in ("name", "date", "machine", "oper"):
             self._tree.heading(col, command=lambda c=col: self._sort_by_column(c))
@@ -489,10 +626,12 @@ class LogReaderApp:
         self._tree.tag_configure("pass",    foreground=_PALETTE["pass_col"])
         self._tree.tag_configure("fail",    foreground=_PALETTE["fail_col"])
         self._tree.tag_configure("neutral", foreground=_PALETTE["neutral_col"])
+        self._tree.tag_configure("info",    foreground=_PALETTE["text_dim"])
 
-        tree_vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=self._tree.yview)
-        tree_vsb.grid(row=0, column=1, sticky="NS")
-        self._tree.configure(yscrollcommand=tree_vsb.set)
+
+        ict_vsb = ttk.Scrollbar(self._ict_frame, orient="vertical", command=self._tree.yview)
+        ict_vsb.grid(row=0, column=1, sticky="NS")
+        self._tree.configure(yscrollcommand=ict_vsb.set)
 
         self._tree.bind("<Double-ButtonRelease-1>", self._on_tree_activate)
         self._tree.bind("<Return>", self._on_tree_activate)
@@ -549,11 +688,15 @@ class LogReaderApp:
             self._path_row.grid_remove()
             self._lb_frame.grid_remove()
             self._period_row.grid()
+            self._sn_frame.grid_remove()
+            self._ict_frame.grid()
         else:
             self._search_entry_label.configure(text="Serial Number:")
             self._period_row.grid_remove()
             self._paths_header.grid()
             self._update_paths_visibility()
+            self._ict_frame.grid_remove()
+            self._sn_frame.grid()
         self.search_entry.delete(0, tk.END)
         self.search_entry.focus()
 
@@ -741,7 +884,7 @@ class LogReaderApp:
         self._apply_filter()
 
     def _update_heading_arrows(self):
-        labels = {"name": "File", "date": "Date", "machine": "Machine", "oper": "Operator"}
+        labels = {"name": "File", "date": "Date", "machine": "Station", "oper": "Operator"}
         for col, label in labels.items():
             arrow = (" ↓" if self._sort_rev else " ↑") if col == self._sort_col else ""
             self._tree.heading(col, text=label + arrow)
@@ -753,41 +896,109 @@ class LogReaderApp:
     def _clear_results(self):
         self._logs = []
         self._displayed_logs = []
+        self._iid_to_log = {}
         self._tree.delete(*self._tree.get_children())
+        self._text.configure(state="normal")
+        self._text.delete("1.0", "end")
+        self._text.configure(state="disabled")
         self.results_count_label.configure(text="Searching…")
 
     def _populate_results(self, logs: list):
+        if self._mode.get() == "pn":
+            self._populate_tree_results(logs)
+        else:
+            self._populate_text_results(logs)
+
+    def _populate_text_results(self, logs: list):
         self._displayed_logs = logs
-        self._tree.delete(*self._tree.get_children())
+        self._iid_to_log = {}
+        self._text.configure(state="normal")
+        self._text.delete("1.0", "end")
 
         for idx, log in enumerate(logs):
+            iid = str(idx)
+            self._iid_to_log[iid] = log
+            tag = _color_tag_for_log(log).replace("_tag", "")
+            fname_tag = f"fname_{idx}"
+
+            if idx > 0:
+                self._text.insert("end", "\n")
+
+            self._text.insert("end", f"[{idx + 1}]", "number")
+            self._text.insert("end", " ")
+            self._text.insert("end", log["name"] + "\n", (tag, fname_tag))
+            self._text.tag_bind(fname_tag, "<Double-Button-1>",
+                                lambda e, i=iid: self._open_log_by_iid(i))
+            self._text.tag_configure(fname_tag, underline=False)
+
+            self._text.insert("end", f"      Path: {log['path']}\n", "dim")
             is_ict = "ICT" in log.get("tags", [])
-
-            dt = _parse_filename_date(log["name"])
-            if dt:
-                date_str = dt.strftime("%Y-%m-%d  %H:%M:%S")
-            elif log.get("datetime"):
-                date_str = log["datetime"]
+            if is_ict:
+                oper_id = log.get("oper_id") or ""
+                oper_name = _RUNNERS.get(oper_id, oper_id) if oper_id else ""
+                desc = log.get("description") or ""
+                parts = [p for p in (desc, f"Operator: {oper_name}" if oper_name else "") if p]
+                info = "   |   ".join(parts)
             else:
-                date_str = ""
+                info = log.get("description") or ""
+            if info:
+                self._text.insert("end", f"      Info: {info}\n", "dim")
 
-            machine = log["tags"][1] if is_ict and len(log.get("tags", [])) > 1 else ""
+        self._text.configure(state="disabled")
 
-            oper_id = log.get("oper_id") or ""
-            oper_label = _RUNNERS.get(oper_id, oper_id) if oper_id else ""
+    def _populate_tree_results(self, logs: list):
+        self._displayed_logs = logs
+        self._iid_to_log = {}
+        self._tree.delete(*self._tree.get_children())
 
-            row_tag = _color_tag_for_log(log).replace("_tag", "")
+        for idx, (main, companions) in enumerate(_group_logs(logs)):
+            parent_iid = f"g{idx}"
+            tags = main.get("tags", [])
+            dt = _parse_filename_date(main["name"])
+            date_str = dt.strftime("%Y-%m-%d  %H:%M:%S") if dt else (main.get("datetime") or "")
+            machine = tags[1] if len(tags) > 1 else ""
+            tag = _color_tag_for_log(main).replace("_tag", "")
 
-            self._tree.insert(
-                "", "end",
-                iid=str(idx),
-                values=(log["name"], date_str, machine, oper_label),
-                tags=(row_tag,),
-            )
+            oper_id = main.get("oper_id") or ""
+            oper_name = _RUNNERS.get(oper_id, oper_id) if oper_id else ""
+
+            self._tree.insert("", "end", iid=parent_iid,
+                              values=(main["name"], date_str, machine, oper_name), tags=(tag,))
+            self._iid_to_log[parent_iid] = main
+
+            # Info sub-row: path
+            self._tree.insert("", "end", iid=f"{parent_iid}_i",
+                              values=(f"    Path: {main['path']}", "", "", ""), tags=("info",))
+            self._iid_to_log[f"{parent_iid}_i"] = main
+
+            # SUMMARY companions
+            for cidx, child in enumerate(companions):
+                child_iid = f"g{idx}c{cidx}"
+                dt_c = _parse_filename_date(child["name"])
+                date_str_c = dt_c.strftime("%Y-%m-%d  %H:%M:%S") if dt_c else (child.get("datetime") or "")
+                machine_c = child.get("tags", ["", ""])[1] if len(child.get("tags", [])) > 1 else ""
+                ctag = _color_tag_for_log(child).replace("_tag", "")
+                self._tree.insert("", "end", iid=child_iid,
+                                  values=("  └ " + child["name"], date_str_c, machine_c, ""), tags=(ctag,))
+                self._iid_to_log[child_iid] = child
 
     # ------------------------------------------------------------------
     # File viewer
     # ------------------------------------------------------------------
+
+    def _open_log_by_iid(self, iid: str):
+        log = self._iid_to_log.get(iid)
+        if not log:
+            return
+        filepath = log["path"]
+        try:
+            if filepath.lower().endswith(".csv"):
+                self._open_in_libreoffice(filepath)
+            else:
+                _open_in_terminal(filepath)
+            self.status_var.set(f"Opened: {Path(filepath).name}")
+        except Exception as exc:
+            self.status_var.set(f"Error opening file: {exc}")
 
     def _open_in_libreoffice(self, filepath):
         import subprocess
@@ -805,22 +1016,17 @@ class LogReaderApp:
         sel = self._tree.selection()
         if not sel:
             return
-        try:
-            log = self._displayed_logs[int(sel[0])]
-        except (IndexError, ValueError):
-            return
-        filepath = log["path"]
-        try:
-            if filepath.lower().endswith(".csv"):
-                self._open_in_libreoffice(filepath)
-            else:
-                _open_in_terminal(filepath)
-            self.status_var.set(f"Opened: {Path(filepath).name}")
-        except Exception as exc:
-            self.status_var.set(f"Error opening file: {exc}")
+        self._open_log_by_iid(sel[0])
 
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = LogReaderApp(root)
+    if sys.platform == "win32":
+        root.state("zoomed")
+    else:
+        try:
+            root.attributes("-zoomed", True)
+        except tk.TclError:
+            pass
     root.mainloop()

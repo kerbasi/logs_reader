@@ -57,8 +57,9 @@ def _parse_csv_fields(path: Path, *field_names: str) -> Dict[str, Optional[str]]
 
 
 def _parse_oper_id(path: Path) -> Optional[str]:
-    """Return OperID value from CSV header row + the data row below it."""
-    return _parse_csv_fields(path, "OperID")["OperID"]
+    """Return operator ID/name from the first matching column (OperID / OperatorID / Operator)."""
+    fields = _parse_csv_fields(path, "OperID", "OperatorID", "Operator")
+    return fields["OperID"] or fields["OperatorID"] or fields["Operator"]
 
 
 def _parse_pn(path: Path) -> Optional[str]:
@@ -85,7 +86,7 @@ class ICTIndex:
         if not self._data:
             self._build(months=_hot_months())
         self._ready.set()
-        self._start_background()
+        self._start_background(immediate_hot=bool(self._data))
 
     def _load(self) -> None:
         try:
@@ -135,8 +136,8 @@ class ICTIndex:
             for f in path.iterdir():
                 if not (f.is_file() and f.name.lower().endswith(".csv")):
                     continue
-                fields = _parse_csv_fields(f, "OperID", "PN", "PartNo", "PartNumber")
-                oper_id = fields["OperID"]
+                fields = _parse_csv_fields(f, "OperID", "OperatorID", "Operator", "PN", "PartNo", "PartNumber")
+                oper_id = fields["OperID"] or fields["OperatorID"] or fields["Operator"]
                 pn = fields["PN"] or fields["PartNo"] or fields["PartNumber"]
                 file_map[f.name] = oper_id
                 if pn:
@@ -188,11 +189,14 @@ class ICTIndex:
                     self._pn_index.setdefault(pn, []).extend(paths)
         self._save(is_full=is_full)
 
-    def _start_background(self) -> None:
-        threading.Thread(target=self._background_loop, daemon=True).start()
+    def _start_background(self, immediate_hot: bool = False) -> None:
+        threading.Thread(target=self._background_loop, args=(immediate_hot,), daemon=True).start()
 
-    def _background_loop(self) -> None:
+    def _background_loop(self, immediate_hot: bool = False) -> None:
         last_full = self._last_full_build
+        if immediate_hot:
+            # Rebuild hot months right away so stale oper_id values are refreshed
+            self._build(months=_hot_months())
         while True:
             time.sleep(HOT_REBUILD_INTERVAL)
             if time.time() - last_full >= FULL_REBUILD_INTERVAL:
@@ -221,6 +225,12 @@ class ICTIndex:
                         mtime = full_path.stat().st_mtime
                     except OSError:
                         mtime = 0.0
+                    # Lazy oper_id lookup for stale index entries (None = pre-oper_id build)
+                    if oper_id is None:
+                        oper_id = _parse_oper_id(full_path)
+                        with self._lock:
+                            if key in self._data and fname in self._data[key]:
+                                self._data[key][fname] = oper_id
                     dt_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M") if mtime else ""
                     results.append({
                         "path": str(full_path),
