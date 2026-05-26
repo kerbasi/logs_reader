@@ -963,9 +963,6 @@ class LogReaderApp:
                 self._text.tag_bind(cfname_tag, "<Double-Button-1>",
                                     lambda e, i=ciid: self._open_log_by_iid(i))
                 self._text.tag_configure(cfname_tag, underline=False)
-                cinfo = _build_info_line(child)
-                if cinfo:
-                    self._text.insert("end", f"        Info: {cinfo}\n", "dim")
 
         self._text.configure(state="disabled")
 
