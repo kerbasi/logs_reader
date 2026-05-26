@@ -24,7 +24,7 @@ class TestViewFileUsesSubprocess(unittest.TestCase):
         from src.interface import view_file
         with patch('subprocess.call') as mock_call:
             view_file('/some/file.log')
-            mock_call.assert_called_once_with(['less', '-r', '/some/file.log'])
+            mock_call.assert_called_once_with(['less', '-SR', '/some/file.log'])
 
     def test_fallback_uses_subprocess_not_os_system(self):
         """When less is not found, fallback must not use os.system."""

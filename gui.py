@@ -94,14 +94,14 @@ def _open_in_terminal(filepath: str):
                     "-sl", "10000",
                     "-geometry", "220x55",
                     "-title", Path(filepath).name,
-                    "-e", "less", "-r", filepath,
+                    "-e", "less", "-SR", filepath,
                 ])
             elif term == "gnome-terminal":
-                subprocess.Popen([term, "--", "less", "-r", filepath])
+                subprocess.Popen([term, "--", "less", "-SR", filepath])
             elif term in ("alacritty", "kitty"):
-                subprocess.Popen([term, "-e", "less", "-r", filepath])
+                subprocess.Popen([term, "-e", "less", "-SR", filepath])
             else:
-                subprocess.Popen([term, "-e", f"less -r '{filepath}'"])
+                subprocess.Popen([term, "-e", f"less -SR '{filepath}'"])
             return
     raise RuntimeError(
         "No terminal emulator found. Install xterm or set $TERM.")
@@ -146,6 +146,20 @@ def _group_logs(logs: list) -> list:
             result.append((s, []))
 
     return result
+
+
+def _build_info_line(log: dict) -> str:
+    """Return formatted Info line text for a log entry."""
+    is_ict = "ICT" in log.get("tags", [])
+    if is_ict:
+        oper_id = log.get("oper_id") or ""
+        oper_name = _RUNNERS.get(oper_id, oper_id) if oper_id else ""
+        desc = log.get("description") or ""
+        parts = [p for p in (desc, f"Operator: {oper_name}" if oper_name else "") if p]
+        return "   |   ".join(parts)
+    else:
+        raw = log.get("description") or ""
+        return format_description(raw) if raw else ""
 
 
 _PALETTE = {
@@ -915,34 +929,43 @@ class LogReaderApp:
         self._text.configure(state="normal")
         self._text.delete("1.0", "end")
 
-        for idx, log in enumerate(logs):
-            iid = str(idx)
-            self._iid_to_log[iid] = log
-            tag = _color_tag_for_log(log).replace("_tag", "")
-            fname_tag = f"fname_{idx}"
+        grouped = _group_logs(logs)
+        counter = 0
+        for main, companions in grouped:
+            counter += 1
+            iid = str(counter - 1)
+            self._iid_to_log[iid] = main
+            tag = _color_tag_for_log(main).replace("_tag", "")
+            fname_tag = f"fname_{iid}"
 
-            if idx > 0:
+            if counter > 1:
                 self._text.insert("end", "\n")
 
-            self._text.insert("end", f"[{idx + 1}]", "number")
+            self._text.insert("end", f"[{counter}]", "number")
             self._text.insert("end", " ")
-            self._text.insert("end", log["name"] + "\n", (tag, fname_tag))
+            self._text.insert("end", main["name"] + "\n", (tag, fname_tag))
             self._text.tag_bind(fname_tag, "<Double-Button-1>",
                                 lambda e, i=iid: self._open_log_by_iid(i))
             self._text.tag_configure(fname_tag, underline=False)
 
-            self._text.insert("end", f"      Path: {log['path']}\n", "dim")
-            is_ict = "ICT" in log.get("tags", [])
-            if is_ict:
-                oper_id = log.get("oper_id") or ""
-                oper_name = _RUNNERS.get(oper_id, oper_id) if oper_id else ""
-                desc = log.get("description") or ""
-                parts = [p for p in (desc, f"Operator: {oper_name}" if oper_name else "") if p]
-                info = "   |   ".join(parts)
-            else:
-                info = log.get("description") or ""
+            self._text.insert("end", f"      Path: {main['path']}\n", "dim")
+            info = _build_info_line(main)
             if info:
                 self._text.insert("end", f"      Info: {info}\n", "dim")
+
+            for cidx, child in enumerate(companions):
+                ciid = f"c{counter - 1}_{cidx}"
+                self._iid_to_log[ciid] = child
+                ctag = _color_tag_for_log(child).replace("_tag", "")
+                cfname_tag = f"fname_{ciid}"
+                self._text.insert("end", "      └ ")
+                self._text.insert("end", child["name"] + "\n", (ctag, cfname_tag))
+                self._text.tag_bind(cfname_tag, "<Double-Button-1>",
+                                    lambda e, i=ciid: self._open_log_by_iid(i))
+                self._text.tag_configure(cfname_tag, underline=False)
+                cinfo = _build_info_line(child)
+                if cinfo:
+                    self._text.insert("end", f"        Info: {cinfo}\n", "dim")
 
         self._text.configure(state="disabled")
 

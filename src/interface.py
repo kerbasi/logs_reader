@@ -135,7 +135,7 @@ def view_file(filepath: str):
 
     # Check if 'less' is available (common on Linux)
     try:
-        subprocess.call(['less', '-r', filepath])
+        subprocess.call(['less', '-SR', filepath])
     except FileNotFoundError:
         # Fallback for systems without less (e.g. Windows testing)
         if os.name == 'nt':
