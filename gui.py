@@ -328,7 +328,7 @@ def _apply_theme(root):
         relief=[("pressed", "flat")],
     )
 
-    # ── Secondary button (Add Path, ▶ toggle) ────────────────────────
+    # ── Secondary button (Add Path) ──────────────────────────────────
     style.configure("Secondary.TButton",
         background=_PALETTE["btn_secondary"],
         foreground=_PALETTE["text"],
@@ -343,6 +343,26 @@ def _apply_theme(root):
             ("active",  _PALETTE["btn_secondary_active"]),
             ("pressed", _PALETTE["btn_secondary_active"]),
         ],
+        relief=[("pressed", "flat")],
+    )
+
+    # ── Small secondary button (▶ Extra paths toggle) ─────────────────
+    _font_small = (_FONT_UI[0], _FONT_UI[1] - 2)
+    style.configure("Small.Secondary.TButton",
+        background=_PALETTE["btn_secondary"],
+        foreground=_PALETTE["text_dim"],
+        borderwidth=0,
+        relief="flat",
+        padding=(5, 2),
+        font=_font_small,
+        focuscolor=_PALETTE["accent"],
+    )
+    style.map("Small.Secondary.TButton",
+        background=[
+            ("active",  _PALETTE["btn_secondary_active"]),
+            ("pressed", _PALETTE["btn_secondary_active"]),
+        ],
+        foreground=[("active", _PALETTE["text"])],
         relief=[("pressed", "flat")],
     )
 
@@ -613,50 +633,41 @@ class LogReaderApp:
 
         # Row 2 — Paths toggle header (SN mode only)
         self._paths_header = ttk.Frame(search_frame)
-        self._paths_header.grid(row=2, column=0, columnspan=2, sticky="W", pady=(6, 0))
+        self._paths_header.grid(row=2, column=0, columnspan=2, sticky="W", pady=(4, 0))
         self._paths_toggle_btn = ttk.Button(
             self._paths_header, text=self._paths_btn_text(),
-            command=self._toggle_paths, style="Secondary.TButton",
+            command=self._toggle_paths, style="Small.Secondary.TButton",
         )
         self._paths_toggle_btn.pack(side="left")
 
-        # Row 3 — Extra path + buttons (SN mode only, collapsed by default)
+        # Row 3 — Extra path entry + Add button (SN mode only, collapsed by default)
         self._path_row = ttk.Frame(search_frame)
         self._path_row.grid(row=3, column=0, columnspan=2, sticky="EW", pady=(4, 0))
         self._path_row.columnconfigure(1, weight=1)
         ttk.Label(self._path_row, text="Extra path:").grid(row=0, column=0, sticky="W", padx=(0, 4))
         self.path_entry = ttk.Entry(self._path_row)
         self.path_entry.grid(row=0, column=1, sticky="EW", padx=(0, 8))
-        path_btn_frame = ttk.Frame(self._path_row)
-        path_btn_frame.grid(row=0, column=2, sticky="W")
-        ttk.Button(path_btn_frame, text="Add", command=self._add_path,
-                   style="Secondary.TButton").pack(side="left", padx=(0, 4))
-        ttk.Button(path_btn_frame, text="Remove", command=self._remove_path,
-                   style="Danger.TButton").pack(side="left")
+        self.path_entry.bind("<Return>", lambda _e: self._add_path())
+        ttk.Button(self._path_row, text="Add", command=self._add_path,
+                   style="Secondary.TButton").grid(row=0, column=2)
         self._path_row.grid_remove()
 
-        # Row 4 — Path listbox (SN mode only, collapsed by default)
+        # Row 4 — Path chips (SN mode only, collapsed by default)
         self._lb_frame = ttk.Frame(search_frame)
         self._lb_frame.grid(row=4, column=0, columnspan=2, sticky="EW", pady=(2, 0))
         self._lb_frame.columnconfigure(0, weight=1)
 
-        self.path_listbox = tk.Listbox(
-            self._lb_frame, height=3, selectmode=tk.SINGLE, activestyle="dotbox",
+        self._chips_text = tk.Text(
+            self._lb_frame, wrap=tk.WORD, height=3,
             bg=_PALETTE["bg_input"], fg=_PALETTE["text"],
-            selectbackground=_PALETTE["select_bg"],
-            selectforeground=_PALETTE["text"],
             borderwidth=0, highlightthickness=1,
             highlightcolor=_PALETTE["border"],
             highlightbackground=_PALETTE["border"],
-            relief="flat",
+            relief="flat", cursor="arrow",
+            padx=4, pady=4, state=tk.DISABLED,
         )
-        self.path_listbox.grid(row=0, column=0, sticky="EW")
-        lb_scroll = ttk.Scrollbar(
-            self._lb_frame, orient="vertical", command=self.path_listbox.yview)
-        lb_scroll.grid(row=0, column=1, sticky="NS")
-        self.path_listbox.configure(yscrollcommand=lb_scroll.set)
-        for p in self._extra_paths:
-            self.path_listbox.insert(tk.END, p)
+        self._chips_text.grid(row=0, column=0, sticky="EW")
+        self._rebuild_chips()
         self._lb_frame.grid_remove()
 
         self.search_entry.focus()
@@ -778,21 +789,44 @@ class LogReaderApp:
     # Path management
     # ------------------------------------------------------------------
 
+    def _rebuild_chips(self):
+        txt = self._chips_text
+        txt.configure(state=tk.NORMAL)
+        txt.delete("1.0", tk.END)
+        for p in self._extra_paths:
+            disp = p if len(p) <= 42 else "…" + p[-40:]
+            chip = tk.Frame(txt, bg=_PALETTE["bg_widget"], padx=0, pady=0)
+            tk.Label(
+                chip, text=disp,
+                bg=_PALETTE["bg_widget"], fg=_PALETTE["text"],
+                font=(_FONT_UI[0], _FONT_UI[1] - 1),
+                padx=5, pady=2,
+            ).pack(side="left")
+            def _make_remover(path=p):
+                def _rm():
+                    if path in self._extra_paths:
+                        self._extra_paths.remove(path)
+                    self._paths_toggle_btn.configure(text=self._paths_btn_text())
+                    self._rebuild_chips()
+                return _rm
+            tk.Button(
+                chip, text="×", command=_make_remover(),
+                bg=_PALETTE["bg_widget"], fg=_PALETTE["text_dim"],
+                activebackground=_PALETTE["btn_danger"],
+                activeforeground=_PALETTE["text"],
+                font=(_FONT_UI[0], _FONT_UI[1] - 1),
+                padx=3, pady=0, relief="flat", bd=0, cursor="hand2",
+            ).pack(side="left")
+            txt.window_create(tk.END, window=chip)
+            txt.insert(tk.END, "  ")  # word-wrap break point between chips
+        txt.configure(state=tk.DISABLED)
+
     def _add_path(self):
         p = self.path_entry.get().strip()
         if p and p not in self._extra_paths:
             self._extra_paths.append(p)
-            self.path_listbox.insert(tk.END, p)
+            self._rebuild_chips()
         self.path_entry.delete(0, tk.END)
-        self._paths_toggle_btn.configure(text=self._paths_btn_text())
-
-    def _remove_path(self):
-        sel = self.path_listbox.curselection()
-        if not sel:
-            return
-        idx = sel[0]
-        self.path_listbox.delete(idx)
-        self._extra_paths.pop(idx)
         self._paths_toggle_btn.configure(text=self._paths_btn_text())
 
     def _paths_btn_text(self) -> str:
