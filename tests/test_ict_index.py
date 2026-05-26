@@ -141,7 +141,8 @@ class TestICTIndex(unittest.TestCase):
             # Test reload from file
             idx2 = ICTIndex(index_path=str(self.index_file))
             self.assertIn(f"{machine}/{month}", idx2._data)
-            self.assertEqual(idx2._data[f"{machine}/{month}"], ["test_SN789.csv"])
+            self.assertIn("test_SN789.csv", idx2._data[f"{machine}/{month}"])
+            self.assertEqual(idx2._data[f"{machine}/{month}"]["test_SN789.csv"], "5590")
 
     def test_search_by_pn(self):
         machine = "TRI401"

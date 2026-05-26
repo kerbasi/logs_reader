@@ -101,8 +101,15 @@ class ICTIndex:
                 self._last_full_build = datetime.fromisoformat(full_built_at).timestamp()
             except ValueError:
                 pass
+        # Migrate old format {key: [filename, ...]} → {key: {filename: None}}
+        migrated: Dict[str, Dict[str, Optional[str]]] = {}
+        for k, v in raw.items():
+            if isinstance(v, list):
+                migrated[k] = {fname: None for fname in v}
+            elif isinstance(v, dict):
+                migrated[k] = v
         with self._lock:
-            self._data = raw
+            self._data = migrated
             self._pn_index = pn_index
 
     def _save(self, is_full: bool = False) -> None:
@@ -122,16 +129,21 @@ class ICTIndex:
     def _scan_machine_month(self, machine: str, month: str):
         key = f"{machine}/{month}"
         path = Path(self.BASE_PATH) / machine / month
-        try:
-            files = [f.name for f in path.iterdir() if f.is_file() and f.name.lower().endswith(".csv")]
-        except OSError:
-            files = []
+        file_map: Dict[str, Optional[str]] = {}   # filename → oper_id
         pn_entries: Dict[str, List[str]] = {}
-        for fname in files:
-            pn = _parse_pn(path / fname)
-            if pn:
-                pn_entries.setdefault(pn, []).append(f"{key}/{fname}")
-        return key, files, pn_entries
+        try:
+            for f in path.iterdir():
+                if not (f.is_file() and f.name.lower().endswith(".csv")):
+                    continue
+                fields = _parse_csv_fields(f, "OperID", "PN", "PartNo", "PartNumber")
+                oper_id = fields["OperID"]
+                pn = fields["PN"] or fields["PartNo"] or fields["PartNumber"]
+                file_map[f.name] = oper_id
+                if pn:
+                    pn_entries.setdefault(pn, []).append(f"{key}/{f.name}")
+        except OSError:
+            pass
+        return key, file_map, pn_entries
 
     def _build(self, months: Optional[List[str]] = None) -> None:
         tasks = []
@@ -149,13 +161,13 @@ class ICTIndex:
                 for month in months:
                     tasks.append((machine, month))
 
-        new_data: Dict[str, List[str]] = {}
+        new_data: Dict[str, Dict[str, Optional[str]]] = {}
         new_pn_index: Dict[str, List[str]] = {}
         with ThreadPoolExecutor(max_workers=20) as executor:
             futures = {executor.submit(self._scan_machine_month, m, mo): (m, mo) for m, mo in tasks}
             for future in as_completed(futures):
-                key, files, pn_entries = future.result()
-                new_data[key] = files
+                key, file_map, pn_entries = future.result()
+                new_data[key] = file_map
                 for pn, paths in pn_entries.items():
                     new_pn_index.setdefault(pn, []).extend(paths)
 
@@ -167,7 +179,6 @@ class ICTIndex:
             else:
                 rebuilt_keys = set(new_data.keys())
                 self._data.update(new_data)
-                # Remove stale PN entries for rebuilt months before re-adding
                 for pn in list(self._pn_index.keys()):
                     self._pn_index[pn] = [
                         p for p in self._pn_index[pn]
@@ -197,13 +208,13 @@ class ICTIndex:
             snapshot = dict(self._data)
 
         results = []
-        for key, files in snapshot.items():
+        for key, file_map in snapshot.items():
             machine, month = key.split("/", 1)
             if from_month and month < from_month:
                 continue
             if to_month and month > to_month:
                 continue
-            for fname in files:
+            for fname, oper_id in file_map.items():
                 if pattern.search(fname):
                     full_path = Path(self.BASE_PATH) / machine / month / fname
                     try:
@@ -211,7 +222,6 @@ class ICTIndex:
                     except OSError:
                         mtime = 0.0
                     dt_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M") if mtime else ""
-                    oper_id = _parse_oper_id(full_path)
                     results.append({
                         "path": str(full_path),
                         "name": fname,
