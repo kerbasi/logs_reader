@@ -31,6 +31,11 @@
 - **`_build_info_line()`** — централизованный хелпер Info: `format_description` для стандартных логов, machine+operator для ICT
 - **Новый SM-формат** — регекс в `format_description` уже был добавлен ранее; добавлены 8 тестов `TestFormatDescriptionNewFormat`
 
+- **ICT rebuild fix** — `HOT_REBUILD_INTERVAL` 30s → 300s; `_background_loop` инициализирует `last_full = time.time()` когда нет записи о прошлом full build, чтобы не делать full rebuild через 30 секунд
+- **SUMMARY grouping fix** — `_group_logs` теперь разделяет датированные и недатированные SUMMARY; для недатированных — позиционное сопоставление (1:1) в рамках одной папки вместо группировки всех под первый main
+- **SUMMARY companion path** — в text view под `└ filename` добавлена строка `Path:` для видимости
+- **test_grouping.py** — 8 тестов для `_group_logs` (датированные, недатированные, смешанные)
+
 ## Что в процессе
 
 _(нет)_
