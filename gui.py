@@ -550,16 +550,19 @@ class LogReaderApp:
             command=self._on_mode_change,
         ).pack(side="left")
 
-        # Row 1 — Single search entry (label swaps with mode)
+        # Row 1 — label | entry (stretches) | Search button
         entry_row = ttk.Frame(search_frame)
         entry_row.grid(row=1, column=0, columnspan=2, sticky="EW", pady=(6, 0))
         entry_row.columnconfigure(1, weight=1)
-        self._search_entry_label = ttk.Label(entry_row, text="Serial Number:", width=22)
+        self._search_entry_label = ttk.Label(entry_row, text="Serial Number:", width=16)
         self._search_entry_label.grid(row=0, column=0, sticky="W", padx=(0, 4))
         self._search_var = tk.StringVar()
         self.search_entry = ttk.Entry(entry_row, textvariable=self._search_var)
         self.search_entry.grid(row=0, column=1, sticky="EW")
         self.search_entry.bind("<Return>", lambda _e: self._start_search())
+        self.search_btn = ttk.Button(
+            entry_row, text="Search", command=self._start_search, width=10)
+        self.search_btn.grid(row=0, column=2, padx=(6, 0))
 
         def _force_upper(*_):
             val = self._search_var.get()
@@ -655,12 +658,6 @@ class LogReaderApp:
         for p in self._extra_paths:
             self.path_listbox.insert(tk.END, p)
         self._lb_frame.grid_remove()
-
-        # Row 5 — Search button
-        self.search_btn = ttk.Button(
-            search_frame, text="Search", command=self._start_search)
-        self.search_btn.grid(
-            row=5, column=0, columnspan=2, sticky="EW", pady=(8, 0))
 
         self.search_entry.focus()
 
