@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 sys.path.append(str(Path(__file__).parent))
-from src.core import ProductResolver, LogSearcher, ICTLogSearcher
+from src.core import ProductResolver, LogSearcher, ICTLogSearcher, _ts_from_fname, _ts_from_desc
 from src.interface import format_description
 
 _RUNNERS: Dict[str, str] = {
@@ -981,35 +981,92 @@ class LogReaderApp:
 
         if mode == "led":
             sn = term
-            resolved_pn = None
-            try:
-                resolved_pn = ProductResolver().get_product_pn(sn)
-            except Exception:
-                pass
-
-            if not resolved_pn:
-                event = threading.Event()
-                result_holder = [None]
-
-                def ask_pn_led():
-                    result_holder[0] = self._ask_manual_pn(sn)
-                    event.set()
-
-                self.root.after(0, ask_pn_led)
-                event.wait()
-                resolved_pn = result_holder[0]
-
-            if not resolved_pn:
+            root_folder = Path(paths[0])
+            if not root_folder.exists():
                 self.root.after(
-                    0, lambda: self._search_done([], "PN resolution failed — search aborted."))
+                    0, lambda: self._search_done([], f"Folder not found: {root_folder}"))
                 return
 
+            # Discover which directories to scan.
+            # If the folder contains YYYYMM subdirs, scan those.
+            # Otherwise treat the folder itself as the target.
+            yyyymm_dirs = []
             try:
-                all_logs = LogSearcher(paths).search(resolved_pn, sn)
-            except Exception as exc:
-                self.root.after(0, lambda: self._search_done([], f"Search error: {exc}"))
-                return
+                for child in root_folder.iterdir():
+                    if child.is_dir() and child.name.isdigit() and len(child.name) == 6:
+                        yyyymm_dirs.append(child)
+            except OSError:
+                pass
+            scan_roots = sorted(yyyymm_dirs) if yyyymm_dirs else [root_folder]
 
+            sn_pat = re.compile(
+                r'(?<![A-Za-z0-9])' + re.escape(sn) + r'(?![A-Za-z0-9])')
+            all_logs: list = []
+
+            for scan_dir in scan_roots:
+                # Collect descriptions from any *.mlnx in this dir
+                descriptions: list = []
+                try:
+                    for mlnx in scan_dir.glob("*.mlnx"):
+                        try:
+                            with open(str(mlnx), 'r', errors='ignore') as fh:
+                                for line in fh:
+                                    if sn in line:
+                                        descriptions.append(line.strip())
+                        except OSError:
+                            pass
+                except OSError:
+                    pass
+
+                # Scan the dir itself and its DEBUG subdir
+                targets = [scan_dir]
+                debug_dir = scan_dir / "DEBUG"
+                if debug_dir.is_dir():
+                    targets.append(debug_dir)
+
+                for target in targets:
+                    try:
+                        files = sorted(
+                            (f for f in target.iterdir() if f.is_file()),
+                            key=lambda f: f.stat().st_mtime,
+                        )
+                    except OSError:
+                        continue
+                    for f in files:
+                        if not sn_pat.search(f.name):
+                            continue
+                        try:
+                            st = f.stat()
+                            mtime, fsize = st.st_mtime, st.st_size
+                        except OSError:
+                            mtime, fsize = 0.0, 0
+                        desc = None
+                        for d in descriptions:
+                            if f.name in d or f.stem in d:
+                                desc = d
+                                break
+                        if not desc:
+                            file_ts = _ts_from_fname(f.name)
+                            if file_ts:
+                                for d in descriptions:
+                                    if _ts_from_desc(d) == file_ts:
+                                        desc = d
+                                        break
+                        dt_str = (datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+                                  if mtime else "")
+                        all_logs.append({
+                            "path": str(f),
+                            "name": f.name,
+                            "date": mtime,
+                            "size": fsize,
+                            "tags": [],
+                            "description": desc,
+                            "datetime": dt_str,
+                        })
+
+            all_logs.sort(key=lambda x: x["date"])
+
+            # Parallel scan for LED image archives
             from src.led_viewer import find_led_archive
             enriched: dict = {id(log): dict(log) for log in all_logs}
             with ThreadPoolExecutor(max_workers=8) as ex:
