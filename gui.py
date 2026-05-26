@@ -238,6 +238,23 @@ def _apply_theme(root):
         font=(_FONT_UI[0], _FONT_UI[1] - 1),
     )
 
+    style.configure("TRadiobutton",
+        background=_PALETTE["bg"],
+        foreground=_PALETTE["text"],
+        font=_FONT_UI,
+        focuscolor=_PALETTE["accent"],
+        indicatorrelief="flat",
+    )
+    style.map("TRadiobutton",
+        background=[("active", _PALETTE["bg"])],
+        foreground=[("active", _PALETTE["text"])],
+        indicatorcolor=[
+            ("selected", _PALETTE["accent"]),
+            ("active",   _PALETTE["bg_widget"]),
+            ("!selected", _PALETTE["bg_input"]),
+        ],
+    )
+
     style.configure("TCheckbutton",
         background=_PALETTE["bg"],
         foreground=_PALETTE["text"],
@@ -266,6 +283,7 @@ class LogReaderApp:
         self._extra_paths: list = list(DEFAULT_PATHS)
         self._show_pass = tk.BooleanVar(value=True)
         self._show_fail = tk.BooleanVar(value=True)
+        self._mode = tk.StringVar(value="sn")
 
         _apply_theme(root)
         self._build_ui()
@@ -283,59 +301,64 @@ class LogReaderApp:
         search_frame = ttk.LabelFrame(root, text="Search", padding=6)
         search_frame.grid(row=0, column=0, sticky="NSEW", padx=6, pady=(6, 2))
         search_frame.columnconfigure(1, weight=1)
-        search_frame.columnconfigure(3, weight=1)
 
-        # Row 0 — SN / PN entries
-        ttk.Label(search_frame, text="Serial Number:").grid(
-            row=0, column=0, sticky="W", padx=(0, 4))
-        self.sn_entry = ttk.Entry(search_frame)
-        self.sn_entry.grid(row=0, column=1, sticky="EW", padx=(0, 12))
+        # Row 0 — Mode radio buttons
+        mode_frame = ttk.Frame(search_frame)
+        mode_frame.grid(row=0, column=0, columnspan=2, sticky="W")
+        ttk.Radiobutton(
+            mode_frame, text="Serial Number", variable=self._mode, value="sn",
+            command=self._on_mode_change,
+        ).pack(side="left", padx=(0, 16))
+        ttk.Radiobutton(
+            mode_frame, text="Product Number (ICT only)", variable=self._mode, value="pn",
+            command=self._on_mode_change,
+        ).pack(side="left")
 
-        ttk.Label(search_frame, text="Product Number:").grid(
-            row=0, column=2, sticky="W", padx=(0, 4))
-        self.pn_entry = ttk.Entry(search_frame)
-        self.pn_entry.grid(row=0, column=3, sticky="EW")
+        # Row 1 — Single search entry (label swaps with mode)
+        entry_row = ttk.Frame(search_frame)
+        entry_row.grid(row=1, column=0, columnspan=2, sticky="EW", pady=(6, 0))
+        entry_row.columnconfigure(1, weight=1)
+        self._search_entry_label = ttk.Label(entry_row, text="Serial Number:", width=22)
+        self._search_entry_label.grid(row=0, column=0, sticky="W", padx=(0, 4))
+        self.search_entry = ttk.Entry(entry_row)
+        self.search_entry.grid(row=0, column=1, sticky="EW")
+        self.search_entry.bind("<Return>", lambda _e: self._start_search())
 
-        # Row 1 — Period filter
+        # Row 2 — Period filter (PN mode only; hidden initially)
         _cur_month = datetime.now().strftime("%Y-%m")
-        ttk.Label(search_frame, text="Period:").grid(
-            row=1, column=0, sticky="W", pady=(6, 0), padx=(0, 4))
-        period_frame = ttk.Frame(search_frame)
-        period_frame.grid(row=1, column=1, columnspan=3, sticky="W", pady=(6, 0))
-        ttk.Label(period_frame, text="From:").pack(side="left", padx=(0, 4))
-        self.from_month_entry = ttk.Entry(period_frame, width=10)
+        self._period_row = ttk.Frame(search_frame)
+        self._period_row.grid(row=2, column=0, columnspan=2, sticky="W", pady=(6, 0))
+        ttk.Label(self._period_row, text="Period:").pack(side="left", padx=(0, 4))
+        ttk.Label(self._period_row, text="From:").pack(side="left", padx=(0, 4))
+        self.from_month_entry = ttk.Entry(self._period_row, width=10)
         self.from_month_entry.insert(0, _cur_month)
         self.from_month_entry.pack(side="left")
-        ttk.Label(period_frame, text="To:", style="Dim.TLabel").pack(
-            side="left", padx=(10, 4))
-        self.to_month_entry = ttk.Entry(period_frame, width=10)
+        ttk.Label(self._period_row, text="To:", style="Dim.TLabel").pack(side="left", padx=(10, 4))
+        self.to_month_entry = ttk.Entry(self._period_row, width=10)
         self.to_month_entry.insert(0, _cur_month)
         self.to_month_entry.pack(side="left")
-        ttk.Label(period_frame, text="  (YYYY-MM)", style="Dim.TLabel").pack(
-            side="left", padx=(6, 0))
+        ttk.Label(self._period_row, text="  (YYYY-MM)", style="Dim.TLabel").pack(side="left", padx=(6, 0))
+        self._period_row.grid_remove()  # hidden in SN mode
 
-        # Row 2 — extra path entry + buttons
-        ttk.Label(search_frame, text="Extra path:").grid(
-            row=2, column=0, sticky="W", pady=(6, 0), padx=(0, 4))
-        self.path_entry = ttk.Entry(search_frame)
-        self.path_entry.grid(
-            row=2, column=1, sticky="EW", pady=(6, 0), padx=(0, 8))
+        # Row 2 — Extra path + buttons (SN mode only)
+        self._path_row = ttk.Frame(search_frame)
+        self._path_row.grid(row=2, column=0, columnspan=2, sticky="EW", pady=(6, 0))
+        self._path_row.columnconfigure(1, weight=1)
+        ttk.Label(self._path_row, text="Extra path:").grid(row=0, column=0, sticky="W", padx=(0, 4))
+        self.path_entry = ttk.Entry(self._path_row)
+        self.path_entry.grid(row=0, column=1, sticky="EW", padx=(0, 8))
+        path_btn_frame = ttk.Frame(self._path_row)
+        path_btn_frame.grid(row=0, column=2, sticky="W")
+        ttk.Button(path_btn_frame, text="Add Path", command=self._add_path).pack(side="left", padx=(0, 4))
+        ttk.Button(path_btn_frame, text="Remove", command=self._remove_path).pack(side="left")
 
-        btn_frame = ttk.Frame(search_frame)
-        btn_frame.grid(row=2, column=2, columnspan=2, sticky="W", pady=(6, 0))
-        ttk.Button(btn_frame, text="Add Path", command=self._add_path).pack(
-            side="left", padx=(0, 4))
-        ttk.Button(btn_frame, text="Remove", command=self._remove_path).pack(
-            side="left")
-
-        # Row 3 — path listbox
-        lb_frame = ttk.Frame(search_frame)
-        lb_frame.grid(
-            row=3, column=0, columnspan=4, sticky="EW", pady=(4, 0))
-        lb_frame.columnconfigure(0, weight=1)
+        # Row 3 — Path listbox (SN mode only)
+        self._lb_frame = ttk.Frame(search_frame)
+        self._lb_frame.grid(row=3, column=0, columnspan=2, sticky="EW", pady=(4, 0))
+        self._lb_frame.columnconfigure(0, weight=1)
 
         self.path_listbox = tk.Listbox(
-            lb_frame, height=3, selectmode=tk.SINGLE, activestyle="dotbox",
+            self._lb_frame, height=3, selectmode=tk.SINGLE, activestyle="dotbox",
             bg=_PALETTE["bg_input"], fg=_PALETTE["text"],
             selectbackground=_PALETTE["select_bg"],
             selectforeground=_PALETTE["text"],
@@ -346,7 +369,7 @@ class LogReaderApp:
         )
         self.path_listbox.grid(row=0, column=0, sticky="EW")
         lb_scroll = ttk.Scrollbar(
-            lb_frame, orient="vertical", command=self.path_listbox.yview)
+            self._lb_frame, orient="vertical", command=self.path_listbox.yview)
         lb_scroll.grid(row=0, column=1, sticky="NS")
         self.path_listbox.configure(yscrollcommand=lb_scroll.set)
         for p in self._extra_paths:
@@ -356,8 +379,9 @@ class LogReaderApp:
         self.search_btn = ttk.Button(
             search_frame, text="Search", command=self._start_search)
         self.search_btn.grid(
-            row=4, column=0, columnspan=4, sticky="EW", pady=(8, 0))
-        self.sn_entry.bind("<Return>", lambda _e: self._start_search())
+            row=4, column=0, columnspan=2, sticky="EW", pady=(8, 0))
+
+        self.search_entry.focus()
 
         # ── Zone 2: Results list ──────────────────────────────────────
         results_frame = ttk.LabelFrame(root, text="Results", padding=6)
@@ -454,24 +478,39 @@ class LogReaderApp:
         self.path_listbox.delete(idx)
         self._extra_paths.pop(idx)
 
+    def _on_mode_change(self):
+        if self._mode.get() == "pn":
+            self._search_entry_label.configure(text="Product Number:")
+            self._path_row.grid_remove()
+            self._lb_frame.grid_remove()
+            self._period_row.grid()
+        else:
+            self._search_entry_label.configure(text="Serial Number:")
+            self._period_row.grid_remove()
+            self._path_row.grid()
+            self._lb_frame.grid()
+        self.search_entry.delete(0, tk.END)
+        self.search_entry.focus()
+
     # ------------------------------------------------------------------
     # Search
     # ------------------------------------------------------------------
 
     def _start_search(self):
-        sn = self.sn_entry.get().strip() or None
-        pn = self.pn_entry.get().strip() or None
-
-        if not sn and not pn:
-            self.status_var.set("Error: enter Serial Number or Product Number.")
+        mode = self._mode.get()
+        term = self.search_entry.get().strip()
+        if not term:
+            label = "Serial" if mode == "sn" else "Product"
+            self.status_var.set(f"Error: enter {label} Number.")
             return
 
-        from_month = _parse_month(self.from_month_entry.get())
-        to_month   = _parse_month(self.to_month_entry.get())
-
-        if from_month and to_month and from_month > to_month:
-            self.status_var.set("Error: 'From' month must not be after 'To' month.")
-            return
+        from_month = to_month = None
+        if mode == "pn":
+            from_month = _parse_month(self.from_month_entry.get())
+            to_month   = _parse_month(self.to_month_entry.get())
+            if from_month and to_month and from_month > to_month:
+                self.status_var.set("Error: 'From' month must not be after 'To' month.")
+                return
 
         self.search_btn.configure(state="disabled")
         self.status_var.set("Searching…")
@@ -479,41 +518,36 @@ class LogReaderApp:
 
         t = threading.Thread(
             target=self._search_worker,
-            args=(sn, pn, list(self._extra_paths), from_month, to_month),
+            args=(mode, term, list(self._extra_paths), from_month, to_month),
             daemon=True,
         )
         t.start()
 
-    def _search_worker(self, sn, pn_hint, paths: list, from_month=None, to_month=None):
-        # PN-only → ICT filename search, no QMS3 lookup needed
-        if not sn:
+    def _search_worker(self, mode: str, term: str, paths: list, from_month=None, to_month=None):
+        if mode == "pn":
             try:
-                logs = ICTLogSearcher().search(pn_hint, from_month=from_month, to_month=to_month)
+                logs = ICTLogSearcher().search(term, from_month=from_month, to_month=to_month)
                 logs.sort(key=lambda x: x["date"], reverse=True)
             except Exception as exc:
-                self.root.after(
-                    0, lambda: self._search_done([], f"Search error: {exc}"))
+                self.root.after(0, lambda: self._search_done([], f"Search error: {exc}"))
                 return
             self.root.after(0, lambda: self._search_done(logs))
             return
 
-        resolved_pn = pn_hint
+        # SN mode — no date filter
+        sn = term
+        resolved_pn = None
+        try:
+            resolved_pn = ProductResolver().get_product_pn(sn)
+        except Exception:
+            pass
 
         if not resolved_pn:
-            try:
-                resolver = ProductResolver()
-                resolved_pn = resolver.get_product_pn(sn)
-            except Exception:
-                resolved_pn = None
-
-        if not resolved_pn:
-            # Ask user for manual entry on the main thread
             event = threading.Event()
             result_holder = [None]
 
             def ask_pn():
-                val = self._ask_manual_pn(sn)
-                result_holder[0] = val
+                result_holder[0] = self._ask_manual_pn(sn)
                 event.set()
 
             self.root.after(0, ask_pn)
@@ -522,22 +556,20 @@ class LogReaderApp:
 
         if not resolved_pn:
             self.root.after(
-                0, lambda: self._search_done(
-                    [], "PN resolution failed — search aborted."))
+                0, lambda: self._search_done([], "PN resolution failed — search aborted."))
             return
 
         try:
             ict = ICTLogSearcher()
             if resolved_pn.upper().startswith("SFG"):
-                logs = ict.search(sn, from_month=from_month, to_month=to_month)
+                logs = ict.search(sn)
             else:
-                logs = LogSearcher(paths).search(resolved_pn, sn, from_month=from_month, to_month=to_month)
+                logs = LogSearcher(paths).search(resolved_pn, sn)
                 if not logs:
-                    logs = ict.search(sn, from_month=from_month, to_month=to_month)
+                    logs = ict.search(sn)
             logs.sort(key=lambda x: x["date"], reverse=True)
         except Exception as exc:
-            self.root.after(
-                0, lambda: self._search_done([], f"Search error: {exc}"))
+            self.root.after(0, lambda: self._search_done([], f"Search error: {exc}"))
             return
 
         self.root.after(0, lambda: self._search_done(logs))
