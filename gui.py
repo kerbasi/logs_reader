@@ -938,8 +938,14 @@ class LogReaderApp:
 
         total = len(self._logs)
         shown = len(filtered)
+        is_pn_mode = self._mode.get() == "pn"
+        capped = is_pn_mode and shown > self._TREE_MAX_ROWS
         if total == 0:
             self.results_count_label.configure(text="No results.")
+        elif capped:
+            self.results_count_label.configure(
+                text=f"Showing {self._TREE_MAX_ROWS} of {shown} results"
+                     + (f" (of {total} total)" if shown != total else ""))
         elif shown == total:
             self.results_count_label.configure(
                 text=f"{total} result{'s' if total != 1 else ''}")
@@ -1043,12 +1049,15 @@ class LogReaderApp:
 
         self._text.configure(state="disabled")
 
+    _TREE_MAX_ROWS = 300
+
     def _populate_tree_results(self, logs: list):
         self._displayed_logs = logs
         self._iid_to_log = {}
         self._tree.delete(*self._tree.get_children())
 
-        for idx, (main, companions) in enumerate(_group_logs(logs)):
+        visible = logs[:self._TREE_MAX_ROWS]
+        for idx, (main, companions) in enumerate(_group_logs(visible)):
             parent_iid = f"g{idx}"
             tags = main.get("tags", [])
             dt = _parse_filename_date(main["name"])
@@ -1063,11 +1072,9 @@ class LogReaderApp:
                               values=(main["name"], date_str, machine, oper_name), tags=(tag,))
             self._iid_to_log[parent_iid] = main
 
-            # Info sub-row: path + size
-            size = _file_size_str(main["path"])
-            size_suffix = f"    {size}" if size else ""
+            # Info sub-row: path only (no stat() call — too slow for large remote result sets)
             self._tree.insert("", "end", iid=f"{parent_iid}_i",
-                              values=(f"    Path: {main['path']}{size_suffix}", "", "", ""), tags=("info",))
+                              values=(f"    Path: {main['path']}", "", "", ""), tags=("info",))
             self._iid_to_log[f"{parent_iid}_i"] = main
 
             # SUMMARY companions
