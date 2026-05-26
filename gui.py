@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import shutil
+import re
 import threading
 import tkinter as tk
 from datetime import datetime
@@ -46,6 +47,22 @@ def _merge_dedup(a: list, b: list) -> list:
             seen.add(item["path"])
             result.append(item)
     return result
+
+
+_DATE_RE = re.compile(
+    r'y(\d{4})\s*m(\d{2})\s*d(\d{2})\s+(\d{2})\.(\d{2})\.(\d{2})'
+)
+
+def _parse_filename_date(fname: str):
+    """Extract datetime from filename like 'y2026 m05 d10 14.45.53'."""
+    m = _DATE_RE.search(fname)
+    if m:
+        try:
+            return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                            int(m.group(4)), int(m.group(5)), int(m.group(6)))
+        except ValueError:
+            pass
+    return None
 
 
 def _open_in_terminal(filepath: str):
@@ -272,6 +289,31 @@ def _apply_theme(root):
         ],
     )
 
+    style.configure("Treeview",
+        background=_PALETTE["bg_widget"],
+        foreground=_PALETTE["text"],
+        fieldbackground=_PALETTE["bg_widget"],
+        rowheight=22,
+        borderwidth=0,
+        relief="flat",
+        font=_FONT_MONO,
+    )
+    style.configure("Treeview.Heading",
+        background=_PALETTE["bg"],
+        foreground=_PALETTE["text_dim"],
+        borderwidth=1,
+        relief="flat",
+        font=(_FONT_UI[0], _FONT_UI[1] - 1),
+    )
+    style.map("Treeview",
+        background=[("selected", _PALETTE["select_bg"])],
+        foreground=[("selected", _PALETTE["text"])],
+    )
+    style.map("Treeview.Heading",
+        background=[("active", _PALETTE["bg_widget"])],
+        relief=[("active", "flat")],
+    )
+
 
 class LogReaderApp:
     def __init__(self, root: tk.Tk):
@@ -284,6 +326,9 @@ class LogReaderApp:
         self._show_pass = tk.BooleanVar(value=True)
         self._show_fail = tk.BooleanVar(value=True)
         self._mode = tk.StringVar(value="sn")
+        self._displayed_logs: list = []
+        self._sort_col: str = "date"
+        self._sort_rev: bool = True
         self._paths_expanded = False
 
         _apply_theme(root)
@@ -420,49 +465,37 @@ class LogReaderApp:
             variable=self._show_fail, command=self._apply_filter,
         ).grid(row=0, column=2, padx=(4, 0))
 
-        res_text_frame = ttk.Frame(results_frame)
-        res_text_frame.grid(row=1, column=0, sticky="NSEW")
-        res_text_frame.columnconfigure(0, weight=1)
-        res_text_frame.rowconfigure(0, weight=1)
+        tree_frame = ttk.Frame(results_frame)
+        tree_frame.grid(row=1, column=0, sticky="NSEW")
+        tree_frame.columnconfigure(0, weight=1)
+        tree_frame.rowconfigure(0, weight=1)
 
-        self.results_text = tk.Text(
-            res_text_frame, state="disabled", wrap="none",
-            cursor="arrow", font=_FONT_MONO,
-            bg=_PALETTE["bg_widget"], fg=_PALETTE["text"],
-            insertbackground=_PALETTE["text"],
-            selectbackground=_PALETTE["select_bg"],
-            selectforeground=_PALETTE["text"],
-            borderwidth=0, highlightthickness=0,
-            relief="flat", padx=8, pady=6,
+        self._tree = ttk.Treeview(
+            tree_frame,
+            columns=("name", "date", "machine", "oper"),
+            show="headings",
+            selectmode="browse",
         )
-        self.results_text.grid(row=0, column=0, sticky="NSEW")
+        self._tree.grid(row=0, column=0, sticky="NSEW")
 
-        res_vsb = ttk.Scrollbar(
-            res_text_frame, orient="vertical",
-            command=self.results_text.yview)
-        res_vsb.grid(row=0, column=1, sticky="NS")
-        res_hsb = ttk.Scrollbar(
-            res_text_frame, orient="horizontal",
-            command=self.results_text.xview)
-        res_hsb.grid(row=1, column=0, sticky="EW")
-        self.results_text.configure(
-            yscrollcommand=res_vsb.set, xscrollcommand=res_hsb.set)
+        self._tree.column("name",    width=380, stretch=True,  minwidth=150, anchor="w")
+        self._tree.column("date",    width=155, stretch=False, minwidth=120, anchor="w")
+        self._tree.column("machine", width=72,  stretch=False, minwidth=60,  anchor="w")
+        self._tree.column("oper",    width=130, stretch=False, minwidth=80,  anchor="w")
 
-        # Colour tags
-        self.results_text.tag_configure(
-            "pass_tag", foreground=_PALETTE["pass_col"])
-        self.results_text.tag_configure(
-            "fail_tag", foreground=_PALETTE["fail_col"])
-        self.results_text.tag_configure(
-            "neutral_tag", foreground=_PALETTE["neutral_col"])
-        self.results_text.tag_configure(
-            "ict_tag", foreground=_PALETTE["ict_col"])
-        self.results_text.tag_configure(
-            "meta_tag", foreground=_PALETTE["text_dim"])
-        self.results_text.tag_configure(
-            "clickable", font=(_FONT_MONO[0], _FONT_MONO[1], "underline"))
+        for col in ("name", "date", "machine", "oper"):
+            self._tree.heading(col, command=lambda c=col: self._sort_by_column(c))
 
-        self.results_text.bind("<Button-1>", self._on_result_click)
+        self._tree.tag_configure("pass",    foreground=_PALETTE["pass_col"])
+        self._tree.tag_configure("fail",    foreground=_PALETTE["fail_col"])
+        self._tree.tag_configure("neutral", foreground=_PALETTE["neutral_col"])
+
+        tree_vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=self._tree.yview)
+        tree_vsb.grid(row=0, column=1, sticky="NS")
+        self._tree.configure(yscrollcommand=tree_vsb.set)
+
+        self._tree.bind("<Double-ButtonRelease-1>", self._on_tree_activate)
+        self._tree.bind("<Return>", self._on_tree_activate)
 
         # ── Status bar ────────────────────────────────────────────────
         self.status_var = tk.StringVar(value="Ready.")
@@ -666,7 +699,9 @@ class LogReaderApp:
             return True
 
         filtered = [log for log in self._logs if _keep(log)]
+        filtered.sort(key=self._sort_key, reverse=self._sort_rev)
         self._populate_results(filtered)
+        self._update_heading_arrows()
 
         total = len(self._logs)
         shown = len(filtered)
@@ -679,73 +714,76 @@ class LogReaderApp:
             self.results_count_label.configure(
                 text=f"{shown} of {total} result{'s' if total != 1 else ''}")
 
+    def _sort_key(self, log: dict):
+        col = self._sort_col
+        if col == "date":
+            dt = _parse_filename_date(log["name"])
+            if dt:
+                return dt
+            ts = log.get("date") or 0.0
+            return datetime.fromtimestamp(ts) if ts else datetime.min
+        if col == "name":
+            return log.get("name", "").lower()
+        if col == "machine":
+            tags = log.get("tags", [])
+            return tags[1] if len(tags) > 1 else ""
+        if col == "oper":
+            oid = log.get("oper_id") or ""
+            return _RUNNERS.get(oid, oid).lower()
+        return ""
+
+    def _sort_by_column(self, col: str):
+        if self._sort_col == col:
+            self._sort_rev = not self._sort_rev
+        else:
+            self._sort_col = col
+            self._sort_rev = (col == "date")
+        self._apply_filter()
+
+    def _update_heading_arrows(self):
+        labels = {"name": "File", "date": "Date", "machine": "Machine", "oper": "Operator"}
+        for col, label in labels.items():
+            arrow = (" ↓" if self._sort_rev else " ↑") if col == self._sort_col else ""
+            self._tree.heading(col, text=label + arrow)
+
     # ------------------------------------------------------------------
     # Results display
     # ------------------------------------------------------------------
 
     def _clear_results(self):
         self._logs = []
-        self.results_text.configure(state="normal")
-        self.results_text.delete("1.0", tk.END)
-        self.results_text.configure(state="disabled")
+        self._displayed_logs = []
+        self._tree.delete(*self._tree.get_children())
         self.results_count_label.configure(text="Searching…")
 
     def _populate_results(self, logs: list):
-        self.results_text.configure(state="normal")
-        self.results_text.delete("1.0", tk.END)
+        self._displayed_logs = logs
+        self._tree.delete(*self._tree.get_children())
 
         for idx, log in enumerate(logs):
             is_ict = "ICT" in log.get("tags", [])
-            color_tag = _color_tag_for_log(log)
-            line_tag = f"row_{idx}"
+
+            dt = _parse_filename_date(log["name"])
+            if dt:
+                date_str = dt.strftime("%Y-%m-%d  %H:%M:%S")
+            elif log.get("datetime"):
+                date_str = log["datetime"]
+            else:
+                date_str = ""
 
             machine = log["tags"][1] if is_ict and len(log.get("tags", [])) > 1 else ""
-            display_name = f"[ICT] [{machine}] {log['name']}" if is_ict else log['name']
-            header = f"[{idx + 1}] {display_name}\n"
-            # Only the name line is clickable
-            self.results_text.insert(tk.END, header, (color_tag, "clickable", line_tag))
 
-            path_line = f"    Path: {log['path']}\n"
-            self.results_text.insert(tk.END, path_line, ("meta_tag",))
+            oper_id = log.get("oper_id") or ""
+            oper_label = _RUNNERS.get(oper_id, oper_id) if oper_id else ""
 
-            info_parts = []
-            if log.get("description"):
-                info_parts.append(format_description(log["description"]))
-            if log.get("datetime"):
-                info_parts.append(log["datetime"])
-            if log.get("oper_id"):
-                oper_id = log["oper_id"]
-                oper_label = _RUNNERS.get(oper_id, oper_id)
-                info_parts.append(f"OPER: {oper_label}")
-            if is_ict:
-                try:
-                    size = Path(log["path"]).stat().st_size
-                    if size >= 1_048_576:
-                        size_str = f"{size / 1_048_576:.1f} MB"
-                    elif size >= 1024:
-                        size_str = f"{size / 1024:.1f} KB"
-                    else:
-                        size_str = f"{size} B"
-                    info_parts.append(f"Size: {size_str}")
-                except OSError:
-                    pass
-            if info_parts:
-                info_line = f"    Info: {'  |  '.join(info_parts)}\n"
-                self.results_text.insert(tk.END, info_line, ("meta_tag",))
+            row_tag = _color_tag_for_log(log).replace("_tag", "")
 
-            self.results_text.insert(tk.END, "\n")
-
-            self.results_text.tag_bind(
-                line_tag, "<Button-1>",
-                lambda _e, i=idx: self._load_file(i),
+            self._tree.insert(
+                "", "end",
+                iid=str(idx),
+                values=(log["name"], date_str, machine, oper_label),
+                tags=(row_tag,),
             )
-            self.results_text.tag_configure(line_tag)
-
-        self.results_text.configure(state="disabled")
-
-    def _on_result_click(self, event):
-        # Handled by per-row tag bindings; this is a fallback no-op
-        pass
 
     # ------------------------------------------------------------------
     # File viewer
@@ -763,10 +801,15 @@ class LogReaderApp:
             self.status_var.set("LibreOffice not found, opening in terminal...")
             _open_in_terminal(filepath)
 
-    def _load_file(self, idx: int):
-        if idx < 0 or idx >= len(self._logs):
+    def _on_tree_activate(self, event=None):
+        sel = self._tree.selection()
+        if not sel:
             return
-        filepath = self._logs[idx]["path"]
+        try:
+            log = self._displayed_logs[int(sel[0])]
+        except (IndexError, ValueError):
+            return
+        filepath = log["path"]
         try:
             if filepath.lower().endswith(".csv"):
                 self._open_in_libreoffice(filepath)
