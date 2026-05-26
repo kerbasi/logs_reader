@@ -3,7 +3,7 @@
 ## Текущее состояние
 
 **Статус:** активная разработка
-**Последнее обновление:** 2026-05-26T12:24:08Z (pre-compaction)
+**Последнее обновление:** 2026-05-26T14:00:00Z
 
 ## Что сделано
 
@@ -25,6 +25,11 @@
 - **Operator fix** — `_parse_oper_id` пробует OperID → OperatorID → Operator; `search()` ленивая дозаписи для None-записей; горячий ребилд сразу при старте
 - **Palette overhaul** — `#18181B` bg, `#2563EB` primary button, `#06B6D4` result numbers, `#10B981` pass; три стиля кнопок: primary/secondary/danger
 - **UX** — поиск автоматически переводит в верхний регистр; приложение открывается развёрнутым; xterm: Monospace 13pt, тёмная тема, геометрия 220×55
+
+- **`less -SR`** — везде заменено `-r` на `-SR` (горизонтальный скролл широких CSV, raw ANSI)
+- **SUMMARY grouping в SN-режиме** — `_populate_text_results` теперь вызывает `_group_logs`, SUMMARY-компаньоны отображаются с отступом `└` под основным файлом
+- **`_build_info_line()`** — централизованный хелпер Info: `format_description` для стандартных логов, machine+operator для ICT
+- **Новый SM-формат** — регекс в `format_description` уже был добавлен ранее; добавлены 8 тестов `TestFormatDescriptionNewFormat`
 
 ## Что в процессе
 
