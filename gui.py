@@ -444,15 +444,21 @@ class LogReaderApp:
         self._init_ict_status()
 
     def _init_ict_status(self):
-        from src.ict_index import get_index
-        idx = get_index()
+        def _setup():
+            try:
+                from src.ict_index import get_index
+                idx = get_index()
 
-        def on_status(msg: str):
-            self.root.after(0, lambda m=msg: self._set_ict_status(m))
+                def on_status(msg: str):
+                    self.root.after(0, lambda m=msg: self._set_ict_status(m))
 
-        idx.add_status_callback(on_status)
-        if idx.is_building:
-            self._set_ict_status("ICT index: updating…")
+                idx.add_status_callback(on_status)
+                if idx.is_building:
+                    self.root.after(0, lambda: self._set_ict_status("ICT index: updating…"))
+            except Exception:
+                pass  # status notifications are best-effort
+
+        threading.Thread(target=_setup, daemon=True).start()
 
     def _set_ict_status(self, msg: str):
         self._ict_index_var.set(msg)
