@@ -82,11 +82,31 @@ class ICTIndex:
         self._lock = threading.RLock()
         self._ready = threading.Event()
         self._last_full_build: float = 0.0
+        self._building = False
+        self._status_callbacks: List = []
+        self._cb_lock = threading.Lock()
         self._load()
         if not self._data:
             self._build(months=_hot_months())
         self._ready.set()
         self._start_background(immediate_hot=bool(self._data))
+
+    @property
+    def is_building(self) -> bool:
+        return self._building
+
+    def add_status_callback(self, cb) -> None:
+        with self._cb_lock:
+            self._status_callbacks.append(cb)
+
+    def _notify(self, msg: str) -> None:
+        with self._cb_lock:
+            cbs = list(self._status_callbacks)
+        for cb in cbs:
+            try:
+                cb(msg)
+            except Exception:
+                pass
 
     def _load(self) -> None:
         try:
@@ -147,6 +167,16 @@ class ICTIndex:
         return key, file_map, pn_entries
 
     def _build(self, months: Optional[List[str]] = None) -> None:
+        self._building = True
+        scope = "hot months" if months else "full index"
+        self._notify(f"ICT index: updating ({scope})…")
+        try:
+            self._build_inner(months)
+        finally:
+            self._building = False
+            self._notify("ICT index: ready")
+
+    def _build_inner(self, months: Optional[List[str]] = None) -> None:
         tasks = []
         if months is None:
             for machine in self.MACHINES:

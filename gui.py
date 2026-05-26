@@ -437,8 +437,31 @@ class LogReaderApp:
         self._sort_rev: bool = True
         self._paths_expanded = False
 
+        self._ict_index_var = tk.StringVar()
+
         _apply_theme(root)
         self._build_ui()
+        self._init_ict_status()
+
+    def _init_ict_status(self):
+        from src.ict_index import get_index
+        idx = get_index()
+
+        def on_status(msg: str):
+            self.root.after(0, lambda m=msg: self._set_ict_status(m))
+
+        idx.add_status_callback(on_status)
+        if idx.is_building:
+            self._set_ict_status("ICT index: updating…")
+
+    def _set_ict_status(self, msg: str):
+        self._ict_index_var.set(msg)
+        if msg:
+            self._ict_index_label.grid()
+        else:
+            self._ict_index_label.grid_remove()
+        if msg == "ICT index: ready":
+            self.root.after(3000, lambda: self._set_ict_status(""))
 
     # ------------------------------------------------------------------
     # UI construction
@@ -567,7 +590,7 @@ class LogReaderApp:
         results_frame.grid(
             row=1, column=0, sticky="NSEW", padx=6, pady=2)
         results_frame.columnconfigure(0, weight=1)
-        results_frame.rowconfigure(1, weight=1)
+        results_frame.rowconfigure(2, weight=1)
 
         # Row 0 — count label + filter checkboxes
         header_frame = ttk.Frame(results_frame)
@@ -587,8 +610,13 @@ class LogReaderApp:
             variable=self._show_fail, command=self._apply_filter,
         ).grid(row=0, column=2, padx=(4, 0))
 
+        self._ict_index_label = ttk.Label(
+            results_frame, textvariable=self._ict_index_var, style="Dim.TLabel")
+        self._ict_index_label.grid(row=1, column=0, sticky="W", padx=2, pady=(0, 2))
+        self._ict_index_label.grid_remove()
+
         results_inner = ttk.Frame(results_frame)
-        results_inner.grid(row=1, column=0, sticky="NSEW")
+        results_inner.grid(row=2, column=0, sticky="NSEW")
         results_inner.columnconfigure(0, weight=1)
         results_inner.rowconfigure(0, weight=1)
 
