@@ -17,31 +17,55 @@ class Colors:
 
 def format_description(raw: str) -> str:
     """
-    Reformats a raw .mlnx description line for readability.
+    Reformats a raw .mlnx description line for readability.  Handles two formats:
 
-    Raw:  2026|03|26|13.27.08:SN[612X7520230219]:ULT[N/A]:00:30:42:Fail:4-722-8357:ALL_VOLTAGE-...
-    Out:  2026-03-26  13:27:08  SN[612X7520230219]  00:30:42  Fail  4-722-8357  ALL_VOLTAGE-...
+    Old (colon-mixed):
+      2026|03|26|13.27.08:SN[612X7520230219]:ULT[N/A]:00:30:42:Fail:4-722-8357:ALL_VOLTAGE-...
+      → 2026-03-26  13:27:08  SN[612X7520230219]  00:30:42  Fail  4-722-8357  ALL_VOLTAGE-...
+
+    New (all-pipe, SM prefix):
+      2026|05|01 04:39:58|SM[618X752438075]|ULT[ULTMRY302,2,5,3] 00:11:07 Fail|ofs.p power...
+      → 2026-05-01  04:39:58  SM[618X752438075]  00:11:07  Fail  ofs.p power...
     """
+    # ── Old format ────────────────────────────────────────────────────
     m = re.match(
-        r'(\d{4})\|(\d{2})\|(\d{2})\|(\d{2})\.(\d{2})\.(\d{2})'  # date + time
-        r':SN\[([^\]]+)\]'                                          # SN[...]
-        r':ULT\[[^\]]*\]'                                           # ULT[...] — dropped
-        r':(\d{2}:\d{2}:\d{2})'                                    # duration
-        r':([^:]+)'                                                  # status
-        r':([^:]+)'                                                  # code
-        r':(.*)',                                                    # remainder
+        r'(\d{4})\|(\d{2})\|(\d{2})\|(\d{2})\.(\d{2})\.(\d{2})'
+        r':SN\[([^\]]+)\]'
+        r':ULT\[[^\]]*\]'
+        r':(\d{2}:\d{2}:\d{2})'
+        r':([^:]+)'
+        r':([^:]+)'
+        r':(.*)',
         raw.strip()
     )
-    if not m:
-        return raw  # unrecognised format — return as-is
+    if m:
+        year, month, day, hh, mm, ss, sn, duration, status, code, rest = m.groups()
+        parts = [f"{year}-{month}-{day}", f"{hh}:{mm}:{ss}",
+                 f"SN[{sn}]", duration, status, code]
+        if rest.strip():
+            parts.append(rest.strip())
+        return "  ".join(parts)
 
-    year, month, day, hh, mm, ss, sn, duration, status, code, rest = m.groups()
-    date = f"{year}-{month}-{day}"
-    time = f"{hh}:{mm}:{ss}"
-    parts = [date, time, f"SN[{sn}]", duration, status, code]
-    if rest.strip():
-        parts.append(rest.strip())
-    return "  ".join(parts)
+    # ── New format: YYYY|MM|DD HH:MM:SS|SM[SN]|STATION[..] dur status|desc ──
+    m2 = re.match(
+        r'(\d{4})\|(\d{2})\|(\d{2})\s+'
+        r'(\d{2}):(\d{2}):(\d{2})'
+        r'\|SM\[([^\]]+)\]'
+        r'\|\w+\[[^\]]*\]\s+'
+        r'(\d{2}:\d{2}:\d{2})\s+'
+        r'(\w+)'
+        r'\|(.*)',
+        raw.strip()
+    )
+    if m2:
+        year, month, day, hh, mm, ss, sn, duration, status, rest = m2.groups()
+        parts = [f"{year}-{month}-{day}", f"{hh}:{mm}:{ss}",
+                 f"SM[{sn}]", duration, status]
+        if rest.strip():
+            parts.append(rest.strip())
+        return "  ".join(parts)
+
+    return raw  # unrecognised format — return as-is
 
 
 def print_header(text: str):
