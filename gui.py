@@ -219,12 +219,9 @@ def _fmt_size(n: int) -> str:
 def _build_info_line(log: dict) -> str:
     """Return formatted Info line text for a log entry."""
     is_ict = "ICT" in log.get("tags", [])
-    led_archive = log.get("led_archive")
-    if led_archive:
-        raw = format_description(log.get("description") or "")
-        arc_name = Path(led_archive).name
-        arc_info = f"Archive: {arc_name}"
-        return f"{raw}   |   {arc_info}" if raw else arc_info
+    if log.get("led_archive"):
+        raw = log.get("description") or ""
+        return format_description(raw) if raw else ""
     if is_ict:
         oper_id = log.get("oper_id") or ""
         oper_name = _RUNNERS.get(oper_id, oper_id) if oper_id else ""
@@ -515,6 +512,7 @@ class LogReaderApp:
         self._mode = tk.StringVar(value="sn")
         self._displayed_logs: list = []
         self._iid_to_log: dict = {}
+        self._iid_to_imgs: dict = {}  # iid → archive_path for [IMGS] links
         self._sort_col: str = "date"
         self._sort_rev: bool = True
         self._paths_expanded = False
@@ -1013,17 +1011,16 @@ class LogReaderApp:
                 return
 
             from src.led_viewer import find_led_archive
-            led_logs = []
+            enriched: dict = {id(log): dict(log) for log in all_logs}
             with ThreadPoolExecutor(max_workers=8) as ex:
-                fut_map = {ex.submit(find_led_archive, log["path"]): log for log in all_logs}
+                fut_map = {ex.submit(find_led_archive, log["path"]): id(log)
+                           for log in all_logs}
                 for fut in as_completed(fut_map):
                     arc = fut.result()
                     if arc:
-                        entry = dict(fut_map[fut])
-                        entry["led_archive"] = arc
-                        led_logs.append(entry)
+                        enriched[fut_map[fut]]["led_archive"] = arc
 
-            led_logs.sort(key=lambda x: x["date"])
+            led_logs = sorted(enriched.values(), key=lambda x: x["date"])
             self.root.after(0, lambda: self._search_done(led_logs))
             return
 
@@ -1188,6 +1185,7 @@ class LogReaderApp:
         self._logs = []
         self._displayed_logs = []
         self._iid_to_log = {}
+        self._iid_to_imgs = {}
         self._tree.delete(*self._tree.get_children())
         self._text.configure(state="normal")
         self._text.delete("1.0", "end")
@@ -1203,6 +1201,7 @@ class LogReaderApp:
     def _populate_text_results(self, logs: list):
         self._displayed_logs = logs
         self._iid_to_log = {}
+        self._iid_to_imgs = {}
         self._text.configure(state="normal")
         self._text.delete("1.0", "end")
 
@@ -1229,6 +1228,18 @@ class LogReaderApp:
             info = _build_info_line(main)
             if info:
                 self._text.insert("end", f"      Info: {info}\n", "dim")
+
+            if main.get("led_archive"):
+                imgs_iid = f"imgs_{iid}"
+                self._iid_to_imgs[imgs_iid] = main["led_archive"]
+                imgs_tag = f"imgslink_{iid}"
+                self._text.insert("end", "      ")
+                self._text.insert("end", "▶ IMGS\n", imgs_tag)
+                self._text.tag_configure(imgs_tag,
+                                         foreground=_PALETTE["ict_col"],
+                                         underline=True)
+                self._text.tag_bind(imgs_tag, "<Button-1>",
+                                    lambda e, i=imgs_iid: self._open_imgs_by_iid(i))
 
             for cidx, child in enumerate(companions):
                 ciid = f"c{counter - 1}_{cidx}"
@@ -1291,20 +1302,6 @@ class LogReaderApp:
         log = self._iid_to_log.get(iid)
         if not log:
             return
-        led_archive = log.get("led_archive")
-        if led_archive:
-            self.status_var.set("Opening LED viewer…")
-            def _open_led():
-                from src.led_viewer import open_led_viewer
-                try:
-                    ok = open_led_viewer(led_archive)
-                    msg = (f"Opened LED viewer: {Path(led_archive).name}" if ok
-                           else "Error: could not build LED gallery (archive missing?)")
-                except Exception as exc:
-                    msg = f"LED viewer error: {exc}"
-                self.root.after(0, lambda: self.status_var.set(msg))
-            threading.Thread(target=_open_led, daemon=True).start()
-            return
         filepath = log["path"]
         try:
             if filepath.lower().endswith(".csv"):
@@ -1314,6 +1311,22 @@ class LogReaderApp:
             self.status_var.set(f"Opened: {Path(filepath).name}")
         except Exception as exc:
             self.status_var.set(f"Error opening file: {exc}")
+
+    def _open_imgs_by_iid(self, iid: str):
+        arc = self._iid_to_imgs.get(iid)
+        if not arc:
+            return
+        self.status_var.set("Opening LED viewer…")
+        def _open():
+            from src.led_viewer import open_led_viewer
+            try:
+                ok = open_led_viewer(arc)
+                msg = (f"Opened LED viewer: {Path(arc).name}" if ok
+                       else "Error: could not build LED gallery (archive missing?)")
+            except Exception as exc:
+                msg = f"LED viewer error: {exc}"
+            self.root.after(0, lambda: self.status_var.set(msg))
+        threading.Thread(target=_open, daemon=True).start()
 
     def _open_in_libreoffice(self, filepath):
         import subprocess
