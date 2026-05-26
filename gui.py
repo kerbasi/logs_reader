@@ -4,6 +4,7 @@ import shutil
 import re
 import threading
 import tkinter as tk
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from tkinter import ttk, messagebox
 from pathlib import Path
@@ -218,6 +219,12 @@ def _fmt_size(n: int) -> str:
 def _build_info_line(log: dict) -> str:
     """Return formatted Info line text for a log entry."""
     is_ict = "ICT" in log.get("tags", [])
+    led_archive = log.get("led_archive")
+    if led_archive:
+        raw = format_description(log.get("description") or "")
+        arc_name = Path(led_archive).name
+        arc_info = f"Archive: {arc_name}"
+        return f"{raw}   |   {arc_info}" if raw else arc_info
     if is_ict:
         oper_id = log.get("oper_id") or ""
         oper_name = _RUNNERS.get(oper_id, oper_id) if oper_id else ""
@@ -568,6 +575,10 @@ class LogReaderApp:
         ttk.Radiobutton(
             mode_frame, text="Product Number (ICT only)", variable=self._mode, value="pn",
             command=self._on_mode_change,
+        ).pack(side="left", padx=(0, 16))
+        ttk.Radiobutton(
+            mode_frame, text="LED Viewer", variable=self._mode, value="led",
+            command=self._on_mode_change,
         ).pack(side="left")
 
         # Row 1 — label | entry (stretches) | Search button
@@ -847,7 +858,8 @@ class LogReaderApp:
             self._lb_frame.grid_remove()
 
     def _on_mode_change(self):
-        if self._mode.get() == "pn":
+        mode = self._mode.get()
+        if mode == "pn":
             self._search_entry_label.configure(text="Product Number:")
             self._paths_header.grid_remove()
             self._path_row.grid_remove()
@@ -855,7 +867,7 @@ class LogReaderApp:
             self._period_row.grid()
             self._sn_frame.grid_remove()
             self._ict_frame.grid()
-        else:
+        else:  # "sn" or "led"
             self._search_entry_label.configure(text="Serial Number:")
             self._period_row.grid_remove()
             self._paths_header.grid()
@@ -875,7 +887,7 @@ class LogReaderApp:
         mode = self._mode.get()
         term = self.search_entry.get().strip()
         if not term:
-            label = "Serial" if mode == "sn" else "Product"
+            label = "Product" if mode == "pn" else "Serial"
             self.status_var.set(f"Error: enter {label} Number.")
             return
 
@@ -935,6 +947,52 @@ class LogReaderApp:
                 self.root.after(0, lambda: self._search_done([], f"Search error: {exc}"))
                 return
             self.root.after(0, lambda: self._search_done(logs))
+            return
+
+        if mode == "led":
+            sn = term
+            resolved_pn = None
+            try:
+                resolved_pn = ProductResolver().get_product_pn(sn)
+            except Exception:
+                pass
+
+            if not resolved_pn:
+                event = threading.Event()
+                result_holder = [None]
+
+                def ask_pn_led():
+                    result_holder[0] = self._ask_manual_pn(sn)
+                    event.set()
+
+                self.root.after(0, ask_pn_led)
+                event.wait()
+                resolved_pn = result_holder[0]
+
+            if not resolved_pn:
+                self.root.after(
+                    0, lambda: self._search_done([], "PN resolution failed — search aborted."))
+                return
+
+            try:
+                all_logs = LogSearcher(paths).search(resolved_pn, sn)
+            except Exception as exc:
+                self.root.after(0, lambda: self._search_done([], f"Search error: {exc}"))
+                return
+
+            from src.led_viewer import find_led_archive
+            led_logs = []
+            with ThreadPoolExecutor(max_workers=8) as ex:
+                fut_map = {ex.submit(find_led_archive, log["path"]): log for log in all_logs}
+                for fut in as_completed(fut_map):
+                    arc = fut.result()
+                    if arc:
+                        entry = dict(fut_map[fut])
+                        entry["led_archive"] = arc
+                        led_logs.append(entry)
+
+            led_logs.sort(key=lambda x: x["date"])
+            self.root.after(0, lambda: self._search_done(led_logs))
             return
 
         # SN mode — no date filter
@@ -1200,6 +1258,20 @@ class LogReaderApp:
     def _open_log_by_iid(self, iid: str):
         log = self._iid_to_log.get(iid)
         if not log:
+            return
+        led_archive = log.get("led_archive")
+        if led_archive:
+            self.status_var.set("Opening LED viewer…")
+            def _open_led():
+                from src.led_viewer import open_led_viewer
+                try:
+                    ok = open_led_viewer(led_archive)
+                    msg = (f"Opened LED viewer: {Path(led_archive).name}" if ok
+                           else "Error: could not build LED gallery (archive missing?)")
+                except Exception as exc:
+                    msg = f"LED viewer error: {exc}"
+                self.root.after(0, lambda: self.status_var.set(msg))
+            threading.Thread(target=_open_led, daemon=True).start()
             return
         filepath = log["path"]
         try:
