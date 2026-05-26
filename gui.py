@@ -122,27 +122,56 @@ def _color_tag_for_log(log: dict) -> str:
 
 
 def _group_logs(logs: list) -> list:
-    """Group SUMMARY companions under their main log as (main, [children]) tuples."""
+    """Group SUMMARY companions under their main log as (main, [children]) tuples.
+
+    Matching strategy:
+    1. Datetime-key match: parse date from both filenames; match by (parent_dir, dt).
+    2. Positional fallback: when dates are unparseable, pair mains and SUMMARYs in
+       the same directory in sorted order (1-to-1). Extras stay standalone.
+    Only non-None dt keys are used in the index to prevent all undated SUMMARYs
+    from collapsing onto the first main.
+    """
     mains = []
-    summary_index: dict = {}
+    summary_by_key: dict = {}   # (parent, dt) → [log, ...]  — only dt != None
+    summary_by_dir: dict = {}   # parent → [log, ...]         — dt == None fallback
+
     for log in logs:
         if "SUMMARY" in log["name"].upper():
             dt = _parse_filename_date(log["name"])
             parent = str(Path(log["path"]).parent)
-            summary_index.setdefault((parent, dt), []).append(log)
+            if dt is not None:
+                summary_by_key.setdefault((parent, dt), []).append(log)
+            else:
+                summary_by_dir.setdefault(parent, []).append(log)
         else:
             mains.append(log)
 
     result = []
+    # Track which mains in each dir have been processed for positional pairing
+    dir_main_counts: dict = {}
+
     for main in mains:
         dt = _parse_filename_date(main["name"])
-        key = (str(Path(main["path"]).parent), dt)
-        children = summary_index.pop(key, [])
+        parent = str(Path(main["path"]).parent)
+
+        if dt is not None:
+            children = summary_by_key.pop((parent, dt), [])
+        else:
+            # Positional pairing: assign the next undated SUMMARY in the same dir
+            undated = summary_by_dir.get(parent, [])
+            idx = dir_main_counts.get(parent, 0)
+            dir_main_counts[parent] = idx + 1
+            children = [undated[idx]] if idx < len(undated) else []
+
         result.append((main, children))
 
-    # Unmatched SUMMARY logs — append as standalone
-    for children_list in summary_index.values():
+    # Remaining unmatched SUMMARYs — show as standalone entries
+    for children_list in summary_by_key.values():
         for s in children_list:
+            result.append((s, []))
+    for parent, undated in summary_by_dir.items():
+        used = dir_main_counts.get(parent, 0)
+        for s in undated[used:]:
             result.append((s, []))
 
     return result
@@ -1010,6 +1039,7 @@ class LogReaderApp:
                 self._text.tag_bind(cfname_tag, "<Double-Button-1>",
                                     lambda e, i=ciid: self._open_log_by_iid(i))
                 self._text.tag_configure(cfname_tag, underline=False)
+                self._text.insert("end", f"           Path: {child['path']}\n", "dim")
 
         self._text.configure(state="disabled")
 

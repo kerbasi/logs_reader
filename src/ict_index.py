@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 INDEX_PATH = str(Path(__file__).parent.parent / "index" / "ict_log_index.json")
-HOT_REBUILD_INTERVAL = 30
+HOT_REBUILD_INTERVAL = 300
 FULL_REBUILD_INTERVAL = 86400
 
 
@@ -223,7 +223,9 @@ class ICTIndex:
         threading.Thread(target=self._background_loop, args=(immediate_hot,), daemon=True).start()
 
     def _background_loop(self, immediate_hot: bool = False) -> None:
-        last_full = self._last_full_build
+        # If no prior full build is recorded, treat now as the baseline so a
+        # full rebuild isn't triggered after the very first HOT_REBUILD_INTERVAL.
+        last_full = self._last_full_build if self._last_full_build > 0 else time.time()
         if immediate_hot:
             # Rebuild hot months right away so stale oper_id values are refreshed
             self._build(months=_hot_months())
