@@ -50,7 +50,7 @@ def _merge_dedup(a: list, b: list) -> list:
 
 
 _DATE_RE = re.compile(
-    r'y(\d{4})\s*m(\d{2})\s*d(\d{2})\s+(\d{2})\.(\d{2})\.(\d{2})'
+    r'y(\d{4})[\s_]+m(\d{2})[\s_]+d(\d{2})[\s_]+(\d{2})\.(\d{2})\.(\d{2})'
 )
 _DATE_RE2 = re.compile(
     r'(\d{4})(\d{2})(\d{2})[_\s](\d{2})\.(\d{2})\.(\d{2})'

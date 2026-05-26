@@ -4,9 +4,32 @@ import re
 import json
 import sys
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 from .ict_index import get_index
+
+# Timestamp extraction from description lines (mlnx format)
+_DESC_TS_OLD = re.compile(r'(\d{4})\|(\d{2})\|(\d{2})\|(\d{2})\.(\d{2})\.(\d{2})')
+_DESC_TS_NEW = re.compile(r'(\d{4})\|(\d{2})\|(\d{2})\s+(\d{2}):(\d{2}):(\d{2})')
+# Timestamp extraction from filenames (y2026_m04_d16_10.07.26 or 20260416_10.07.26)
+_FNAME_TS_SA = re.compile(r'y(\d{4})[\s_]+m(\d{2})[\s_]+d(\d{2})[\s_]+(\d{2})\.(\d{2})\.(\d{2})')
+_FNAME_TS_STD = re.compile(r'(\d{4})(\d{2})(\d{2})[_\s](\d{2})\.(\d{2})\.(\d{2})')
+
+
+def _ts_from_desc(desc: str) -> Optional[Tuple[int, ...]]:
+    for pat in (_DESC_TS_OLD, _DESC_TS_NEW):
+        m = pat.search(desc)
+        if m:
+            return tuple(int(x) for x in m.groups())
+    return None
+
+
+def _ts_from_fname(fname: str) -> Optional[Tuple[int, ...]]:
+    for pat in (_FNAME_TS_SA, _FNAME_TS_STD):
+        m = pat.search(fname)
+        if m:
+            return tuple(int(x) for x in m.groups())
+    return None
 
 
 class ICTLogSearcher:
@@ -229,16 +252,31 @@ class LogSearcher:
                 file_name = f.name
                 file_stem = f.stem
 
-                # 1. Try Heuristic matching (content match)
+                # 1. Content match: filename appears in description
                 for desc in descriptions:
                     if file_name in desc or file_stem in desc:
                         best_desc = desc
                         break
-                
-                # 2. Fallback: Chronological mapping only when counts align exactly,
-                # otherwise we'd assign the wrong description to the wrong file.
-                if not best_desc and len(descriptions) == len(raw_logs):
-                    best_desc = descriptions[idx]
+
+                # 2. Timestamp match: parse datetime from filename and description
+                if not best_desc:
+                    file_ts = _ts_from_fname(file_name)
+                    if file_ts:
+                        for desc in descriptions:
+                            if _ts_from_desc(desc) == file_ts:
+                                best_desc = desc
+                                break
+
+                # 3. Chronological fallback: only when non-SUMMARY file count == description count
+                if not best_desc:
+                    non_summary_logs = [l for l in raw_logs if "SUMMARY" not in l.name.upper()]
+                    if len(descriptions) == len(non_summary_logs):
+                        non_summary_idxes = [
+                            i for i, l in enumerate(raw_logs)
+                            if "SUMMARY" not in l.name.upper()
+                        ]
+                        if idx in non_summary_idxes:
+                            best_desc = descriptions[non_summary_idxes.index(idx)]
 
                 results.append({
                     "path": str(f.absolute()),
