@@ -1018,51 +1018,47 @@ class LogReaderApp:
                 except OSError:
                     pass
 
-                # Scan the dir itself and its DEBUG subdir
-                targets = [scan_dir]
-                debug_dir = scan_dir / "DEBUG"
-                if debug_dir.is_dir():
-                    targets.append(debug_dir)
-
-                for target in targets:
-                    try:
-                        files = sorted(
-                            (f for f in target.iterdir() if f.is_file()),
-                            key=lambda f: f.stat().st_mtime,
-                        )
-                    except OSError:
+                # Scan the dir itself only — DEBUG holds image archives, not log files
+                try:
+                    files = sorted(
+                        (f for f in scan_dir.iterdir() if f.is_file()),
+                        key=lambda f: f.stat().st_mtime,
+                    )
+                except OSError:
+                    continue
+                for f in files:
+                    if f.suffix.lower() in (".gz", ".zip"):
+                        continue  # skip image archives
+                    if not sn_pat.search(f.name):
                         continue
-                    for f in files:
-                        if not sn_pat.search(f.name):
-                            continue
-                        try:
-                            st = f.stat()
-                            mtime, fsize = st.st_mtime, st.st_size
-                        except OSError:
-                            mtime, fsize = 0.0, 0
-                        desc = None
-                        for d in descriptions:
-                            if f.name in d or f.stem in d:
-                                desc = d
-                                break
-                        if not desc:
-                            file_ts = _ts_from_fname(f.name)
-                            if file_ts:
-                                for d in descriptions:
-                                    if _ts_from_desc(d) == file_ts:
-                                        desc = d
-                                        break
-                        dt_str = (datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
-                                  if mtime else "")
-                        all_logs.append({
-                            "path": str(f),
-                            "name": f.name,
-                            "date": mtime,
-                            "size": fsize,
-                            "tags": [],
-                            "description": desc,
-                            "datetime": dt_str,
-                        })
+                    try:
+                        st = f.stat()
+                        mtime, fsize = st.st_mtime, st.st_size
+                    except OSError:
+                        mtime, fsize = 0.0, 0
+                    desc = None
+                    for d in descriptions:
+                        if f.name in d or f.stem in d:
+                            desc = d
+                            break
+                    if not desc:
+                        file_ts = _ts_from_fname(f.name)
+                        if file_ts:
+                            for d in descriptions:
+                                if _ts_from_desc(d) == file_ts:
+                                    desc = d
+                                    break
+                    dt_str = (datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+                              if mtime else "")
+                    all_logs.append({
+                        "path": str(f),
+                        "name": f.name,
+                        "date": mtime,
+                        "size": fsize,
+                        "tags": [],
+                        "description": desc,
+                        "datetime": dt_str,
+                    })
 
             all_logs.sort(key=lambda x: x["date"])
 
