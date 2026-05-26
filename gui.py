@@ -178,6 +178,17 @@ def _group_logs(logs: list) -> list:
 
 
 
+def _fmt_size(n: int) -> str:
+    """Format byte count as human-readable string (no I/O)."""
+    if not n:
+        return ""
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024:
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TB"
+
+
 def _build_info_line(log: dict) -> str:
     """Return formatted Info line text for a log entry."""
     is_ict = "ICT" in log.get("tags", [])
@@ -185,7 +196,8 @@ def _build_info_line(log: dict) -> str:
         oper_id = log.get("oper_id") or ""
         oper_name = _RUNNERS.get(oper_id, oper_id) if oper_id else ""
         desc = log.get("description") or ""
-        parts = [p for p in (desc, f"Operator: {oper_name}" if oper_name else "") if p]
+        size = _fmt_size(log.get("size") or 0)
+        parts = [p for p in (desc, size, f"Operator: {oper_name}" if oper_name else "") if p]
         return "   |   ".join(parts)
     else:
         raw = log.get("description") or ""

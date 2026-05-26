@@ -254,9 +254,12 @@ class ICTIndex:
                 if pattern.search(fname):
                     full_path = Path(self.BASE_PATH) / machine / month / fname
                     try:
-                        mtime = full_path.stat().st_mtime
+                        st = full_path.stat()
+                        mtime = st.st_mtime
+                        fsize = st.st_size
                     except OSError:
                         mtime = 0.0
+                        fsize = 0
                     # Lazy oper_id lookup for stale index entries (None = pre-oper_id build)
                     if oper_id is None:
                         oper_id = _parse_oper_id(full_path)
@@ -268,6 +271,7 @@ class ICTIndex:
                         "path": str(full_path),
                         "name": fname,
                         "date": mtime,
+                        "size": fsize,
                         "tags": ["ICT", machine],
                         "description": f"{machine} / {month}",
                         "datetime": dt_str,
@@ -294,15 +298,19 @@ class ICTIndex:
                 continue
             full_path = Path(self.BASE_PATH) / machine / month / fname
             try:
-                mtime = full_path.stat().st_mtime
+                st = full_path.stat()
+                mtime = st.st_mtime
+                fsize = st.st_size
             except OSError:
                 mtime = 0.0
+                fsize = 0
             dt_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M") if mtime else ""
             oper_id = _parse_oper_id(full_path)
             results.append({
                 "path": str(full_path),
                 "name": fname,
                 "date": mtime,
+                "size": fsize,
                 "tags": ["ICT", machine],
                 "description": f"{machine} / {month}",
                 "datetime": dt_str,
