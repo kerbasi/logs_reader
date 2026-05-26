@@ -284,6 +284,7 @@ class LogReaderApp:
         self._show_pass = tk.BooleanVar(value=True)
         self._show_fail = tk.BooleanVar(value=True)
         self._mode = tk.StringVar(value="sn")
+        self._paths_expanded = False
 
         _apply_theme(root)
         self._build_ui()
@@ -340,21 +341,31 @@ class LogReaderApp:
         ttk.Label(self._period_row, text="  (YYYY-MM)", style="Dim.TLabel").pack(side="left", padx=(6, 0))
         self._period_row.grid_remove()  # hidden in SN mode
 
-        # Row 2 — Extra path + buttons (SN mode only)
+        # Row 2 — Paths toggle header (SN mode only)
+        self._paths_header = ttk.Frame(search_frame)
+        self._paths_header.grid(row=2, column=0, columnspan=2, sticky="W", pady=(6, 0))
+        self._paths_toggle_btn = ttk.Button(
+            self._paths_header, text=self._paths_btn_text(),
+            command=self._toggle_paths, padding=(4, 2),
+        )
+        self._paths_toggle_btn.pack(side="left")
+
+        # Row 3 — Extra path + buttons (SN mode only, collapsed by default)
         self._path_row = ttk.Frame(search_frame)
-        self._path_row.grid(row=2, column=0, columnspan=2, sticky="EW", pady=(6, 0))
+        self._path_row.grid(row=3, column=0, columnspan=2, sticky="EW", pady=(4, 0))
         self._path_row.columnconfigure(1, weight=1)
         ttk.Label(self._path_row, text="Extra path:").grid(row=0, column=0, sticky="W", padx=(0, 4))
         self.path_entry = ttk.Entry(self._path_row)
         self.path_entry.grid(row=0, column=1, sticky="EW", padx=(0, 8))
         path_btn_frame = ttk.Frame(self._path_row)
         path_btn_frame.grid(row=0, column=2, sticky="W")
-        ttk.Button(path_btn_frame, text="Add Path", command=self._add_path).pack(side="left", padx=(0, 4))
+        ttk.Button(path_btn_frame, text="Add", command=self._add_path).pack(side="left", padx=(0, 4))
         ttk.Button(path_btn_frame, text="Remove", command=self._remove_path).pack(side="left")
+        self._path_row.grid_remove()
 
-        # Row 3 — Path listbox (SN mode only)
+        # Row 4 — Path listbox (SN mode only, collapsed by default)
         self._lb_frame = ttk.Frame(search_frame)
-        self._lb_frame.grid(row=3, column=0, columnspan=2, sticky="EW", pady=(4, 0))
+        self._lb_frame.grid(row=4, column=0, columnspan=2, sticky="EW", pady=(2, 0))
         self._lb_frame.columnconfigure(0, weight=1)
 
         self.path_listbox = tk.Listbox(
@@ -374,12 +385,13 @@ class LogReaderApp:
         self.path_listbox.configure(yscrollcommand=lb_scroll.set)
         for p in self._extra_paths:
             self.path_listbox.insert(tk.END, p)
+        self._lb_frame.grid_remove()
 
-        # Row 4 — Search button
+        # Row 5 — Search button
         self.search_btn = ttk.Button(
             search_frame, text="Search", command=self._start_search)
         self.search_btn.grid(
-            row=4, column=0, columnspan=2, sticky="EW", pady=(8, 0))
+            row=5, column=0, columnspan=2, sticky="EW", pady=(8, 0))
 
         self.search_entry.focus()
 
@@ -469,6 +481,7 @@ class LogReaderApp:
             self._extra_paths.append(p)
             self.path_listbox.insert(tk.END, p)
         self.path_entry.delete(0, tk.END)
+        self._paths_toggle_btn.configure(text=self._paths_btn_text())
 
     def _remove_path(self):
         sel = self.path_listbox.curselection()
@@ -477,18 +490,37 @@ class LogReaderApp:
         idx = sel[0]
         self.path_listbox.delete(idx)
         self._extra_paths.pop(idx)
+        self._paths_toggle_btn.configure(text=self._paths_btn_text())
+
+    def _paths_btn_text(self) -> str:
+        arrow = "▼" if self._paths_expanded else "▶"
+        return f"{arrow}  Extra paths ({len(self._extra_paths)})"
+
+    def _toggle_paths(self):
+        self._paths_expanded = not self._paths_expanded
+        self._update_paths_visibility()
+
+    def _update_paths_visibility(self):
+        self._paths_toggle_btn.configure(text=self._paths_btn_text())
+        if self._paths_expanded:
+            self._path_row.grid()
+            self._lb_frame.grid()
+        else:
+            self._path_row.grid_remove()
+            self._lb_frame.grid_remove()
 
     def _on_mode_change(self):
         if self._mode.get() == "pn":
             self._search_entry_label.configure(text="Product Number:")
+            self._paths_header.grid_remove()
             self._path_row.grid_remove()
             self._lb_frame.grid_remove()
             self._period_row.grid()
         else:
             self._search_entry_label.configure(text="Serial Number:")
             self._period_row.grid_remove()
-            self._path_row.grid()
-            self._lb_frame.grid()
+            self._paths_header.grid()
+            self._update_paths_visibility()
         self.search_entry.delete(0, tk.END)
         self.search_entry.focus()
 
