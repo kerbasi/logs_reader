@@ -4,7 +4,7 @@ import shutil
 import re
 import threading
 import tkinter as tk
-from datetime import datetime
+from datetime import datetime, timedelta
 from tkinter import ttk, messagebox
 from pathlib import Path
 from typing import Dict, Optional
@@ -561,7 +561,23 @@ class LogReaderApp:
         self.to_month_entry = ttk.Entry(self._period_row, width=10)
         self.to_month_entry.insert(0, _cur_month)
         self.to_month_entry.pack(side="left")
-        ttk.Label(self._period_row, text="  (YYYY-MM)", style="Dim.TLabel").pack(side="left", padx=(6, 0))
+        ttk.Label(self._period_row, text="(YYYY-MM)", style="Dim.TLabel").pack(side="left", padx=(4, 0))
+        ttk.Label(self._period_row, text="  Days:", style="Dim.TLabel").pack(side="left", padx=(12, 4))
+        self._days_var = tk.StringVar()
+        self._days_entry = ttk.Entry(self._period_row, textvariable=self._days_var, width=5)
+        self._days_entry.pack(side="left")
+        self._days_entry.bind("<Return>", lambda _e: self._start_search())
+
+        # Mutual exclusivity: filling Days clears From/To highlights and vice-versa
+        def _on_days_change(*_):
+            if self._days_var.get().strip():
+                self.from_month_entry.configure(foreground=_PALETTE["text_dim"])
+                self.to_month_entry.configure(foreground=_PALETTE["text_dim"])
+            else:
+                self.from_month_entry.configure(foreground=_PALETTE["text"])
+                self.to_month_entry.configure(foreground=_PALETTE["text"])
+
+        self._days_var.trace_add("write", _on_days_change)
         self._period_row.grid_remove()  # hidden in SN mode
 
         # Row 2 — Paths toggle header (SN mode only)
@@ -803,12 +819,27 @@ class LogReaderApp:
             return
 
         from_month = to_month = None
+        cutoff_ts: Optional[float] = None
         if mode == "pn":
-            from_month = _parse_month(self.from_month_entry.get())
-            to_month   = _parse_month(self.to_month_entry.get())
-            if from_month and to_month and from_month > to_month:
-                self.status_var.set("Error: 'From' month must not be after 'To' month.")
-                return
+            days_str = self._days_var.get().strip()
+            if days_str:
+                try:
+                    n_days = int(days_str)
+                    if n_days <= 0:
+                        raise ValueError
+                except ValueError:
+                    self.status_var.set("Error: Days must be a positive integer.")
+                    return
+                cutoff = datetime.now() - timedelta(days=n_days)
+                cutoff_ts = cutoff.timestamp()
+                from_month = cutoff.strftime("%Y%m")
+                to_month = None  # no upper bound when Days is active
+            else:
+                from_month = _parse_month(self.from_month_entry.get())
+                to_month   = _parse_month(self.to_month_entry.get())
+                if from_month and to_month and from_month > to_month:
+                    self.status_var.set("Error: 'From' month must not be after 'To' month.")
+                    return
 
         self.search_btn.configure(state="disabled")
         self.status_var.set("Searching…")
@@ -816,15 +847,18 @@ class LogReaderApp:
 
         t = threading.Thread(
             target=self._search_worker,
-            args=(mode, term, list(self._extra_paths), from_month, to_month),
+            args=(mode, term, list(self._extra_paths), from_month, to_month, cutoff_ts),
             daemon=True,
         )
         t.start()
 
-    def _search_worker(self, mode: str, term: str, paths: list, from_month=None, to_month=None):
+    def _search_worker(self, mode: str, term: str, paths: list,
+                       from_month=None, to_month=None, cutoff_ts: Optional[float] = None):
         if mode == "pn":
             try:
                 logs = ICTLogSearcher().search(term, from_month=from_month, to_month=to_month)
+                if cutoff_ts is not None:
+                    logs = [l for l in logs if l.get("date", 0) >= cutoff_ts]
                 logs.sort(key=lambda x: x["date"], reverse=True)
             except Exception as exc:
                 self.root.after(0, lambda: self._search_done([], f"Search error: {exc}"))
