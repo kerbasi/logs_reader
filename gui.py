@@ -520,6 +520,7 @@ class LogReaderApp:
         self._paths_expanded = False
 
         self._ict_index_var = tk.StringVar()
+        self._led_path_var = tk.StringVar()
 
         _apply_theme(root)
         self._build_ui()
@@ -650,6 +651,17 @@ class LogReaderApp:
             command=self._toggle_paths, style="Small.Secondary.TButton",
         )
         self._paths_toggle_btn.pack(side="left")
+
+        # Row 2 — LED logs folder (LED mode only; hidden initially)
+        self._led_path_row = ttk.Frame(search_frame)
+        self._led_path_row.grid(row=2, column=0, columnspan=2, sticky="EW", pady=(6, 0))
+        self._led_path_row.columnconfigure(1, weight=1)
+        ttk.Label(self._led_path_row, text="Logs folder:", width=16).grid(
+            row=0, column=0, sticky="W", padx=(0, 4))
+        self._led_path_entry = ttk.Entry(self._led_path_row, textvariable=self._led_path_var)
+        self._led_path_entry.grid(row=0, column=1, sticky="EW")
+        self._led_path_entry.bind("<Return>", lambda _e: self._start_search())
+        self._led_path_row.grid_remove()
 
         # Row 3 — Extra path entry + Add button (SN mode only, collapsed by default)
         self._path_row = ttk.Frame(search_frame)
@@ -864,12 +876,23 @@ class LogReaderApp:
             self._paths_header.grid_remove()
             self._path_row.grid_remove()
             self._lb_frame.grid_remove()
+            self._led_path_row.grid_remove()
             self._period_row.grid()
             self._sn_frame.grid_remove()
             self._ict_frame.grid()
-        else:  # "sn" or "led"
+        elif mode == "led":
             self._search_entry_label.configure(text="Serial Number:")
             self._period_row.grid_remove()
+            self._paths_header.grid_remove()
+            self._path_row.grid_remove()
+            self._lb_frame.grid_remove()
+            self._led_path_row.grid()
+            self._ict_frame.grid_remove()
+            self._sn_frame.grid()
+        else:  # "sn"
+            self._search_entry_label.configure(text="Serial Number:")
+            self._period_row.grid_remove()
+            self._led_path_row.grid_remove()
             self._paths_header.grid()
             self._update_paths_visibility()
             self._ict_frame.grid_remove()
@@ -920,13 +943,22 @@ class LogReaderApp:
                     self.status_var.set("Error: 'From' date must not be after 'To' date.")
                     return
 
+        if mode == "led":
+            led_folder = self._led_path_var.get().strip()
+            if not led_folder:
+                self.status_var.set("Error: set Logs folder path for LED search.")
+                return
+            search_paths = [led_folder]
+        else:
+            search_paths = list(self._extra_paths)
+
         self.search_btn.configure(state="disabled")
         self.status_var.set("Searching…")
         self._clear_results()
 
         t = threading.Thread(
             target=self._search_worker,
-            args=(mode, term, list(self._extra_paths), from_month, to_month, from_ts, to_ts),
+            args=(mode, term, search_paths, from_month, to_month, from_ts, to_ts),
             daemon=True,
         )
         t.start()
