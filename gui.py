@@ -227,7 +227,9 @@ def _build_info_line(log: dict) -> str:
         oper_name = _RUNNERS.get(oper_id, oper_id) if oper_id else ""
         desc = log.get("description") or ""
         size = _fmt_size(log.get("size") or 0)
-        parts = [p for p in (desc, size, f"Operator: {oper_name}" if oper_name else "") if p]
+        dt = _parse_filename_date(log["name"])
+        date_str = dt.strftime("%Y-%m-%d  %H:%M:%S") if dt else (log.get("datetime") or "")
+        parts = [p for p in (date_str, desc, size, f"Operator: {oper_name}" if oper_name else "") if p]
         return "   |   ".join(parts)
     else:
         raw = log.get("description") or ""
