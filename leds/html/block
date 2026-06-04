@@ -1,0 +1,5 @@
+#!/bin/bash
+cp /usr/local/share/block.html.head /tmp/tmp.html 
+echo $1 >>/tmp/tmp.html
+cat /usr/local/share/block.html.end >>/tmp/tmp.html 
+firefox /tmp/tmp.html

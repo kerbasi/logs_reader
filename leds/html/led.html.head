@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>LED photos</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: #333;
+      color: #fff;
+    }
+    h1 {
+      padding: 12px;
+      margin: 0;
+      font-size: 20px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      padding: 12px;
+    }
+    .card {
+      background: #222;
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+    .card:hover {
+      transform: scale(1.03);
+    }
+    .card img {
+      width: 100%;
+      height: 160px;
+      object-fit: scale-down;
+      display: block;
+    }
+    .name {
+      font-size: 14px;
+      padding: 6px;
+      word-break: break-all;
+      color: white;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .name.error {
+      color: #ff6b6b;
+      font-weight: 800;
+    }
+
+    /* Fullscreen overlay */
+    .overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: rgba(70,70,70,0.9);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      cursor: zoom-out;
+    }
+    .overlay img {
+      max-width: 95%;
+      max-height: 95%;
+      border-radius: 8px;
+      box-shadow: 0 0 20px rgba(20,20,20,0.8);
+    }
+  </style>
+</head>
+<body>
+  <div style="text-align: center;"><h1 id="title">LED</h1></div>
+  <div class="grid" id="gallery"></div>
+
+  <!-- Fullscreen overlay -->
+  <div class="overlay" id="overlay">
+    <img id="overlayImg" src="" alt="" />
+  </div>
+
+  <script>
+    // Array of image file paths
+    const images = [

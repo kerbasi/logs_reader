@@ -1,0 +1,28 @@
+
+
+java -jar /usr/flexfs/ST/test_modules/bin/water_cooling/TM171_3KW.jar -retry 1 -method setRemoteStop     /start
+
+snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.3.0 i 2     to power on 
+snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.3.0 i 1     to power off 
+
+minicom + root-root
+
+mst start ; dhclient ; mst server start -s a 
+
+ifconfig
+
+copy the ip in eth0 
+
+exit from minicom 
+
+run from server : mst remote add (ip that you copied) -s a 
+
+python3.6 /usr/flexfs/ST/test_modules/bin/phy_diag/rev_0_94_0/phy_monitor.py 
+
+
+python3.6 /usr/flexfs/ST/test_modules/bin/phy_diag/rev_0_88_4/phy_package/phy_diag.py c -d /dev/mst/192.168.10.20\:23108\,@dev@mst@mt54004_pciconf0 -p 1-20 -a TG
+
+python3.6 /usr/flexfs/ST/test_modules/bin/phy_diag/rev_0_88_4/phy_package/phy_diag.py c -d /dev/mst/192.168.10.20\:23108\,@dev@mst@mt54004_pciconf1 -p 1-20 -a TG
+
+
+curl http://admin:@192.168.10.1:80/SetPower.cgi?p1=0+p2=0; sleep 5; curl http://admin:@192.168.10.1:80/SetPower.cgi?p1=1+p2=1

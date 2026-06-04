@@ -1,0 +1,17 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Station locked</title>
+</head>
+<body bgcolor=black>
+<style>
+.ruller {
+height: 60px;
+background-image: repeating-linear-gradient(-45deg, black 0, black 50px, yellow 50px, yellow 100px);
+}
+</style>
+<div style="height: 100vh; display: grid; place-items: center;">
+<div>
+	<div class=ruller></div>
+	<DIV style="width: 100vw; font-size: 100 ; color: red ;font-family: arial; font-style: italic; font-variant:big-caps;
+			font-weight:bold; letter-spacing: 2px; background-color: yellow"><center>Please do not operate the station<br>Work in progress<br>

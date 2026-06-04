@@ -1,0 +1,49 @@
+
+    const gallery = document.getElementById("gallery");
+    const overlay = document.getElementById("overlay");
+    const overlayImg = document.getElementById("overlayImg");
+    const titleH = document.getElementById("title");
+    titleH.textContent = document.title;
+    // Build grid
+    images.forEach(path => {
+      const card = document.createElement("div");
+      card.className = "card";
+
+      const img = document.createElement("img");
+      img.src = path;
+      img.alt = path.split("/").pop();
+
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = path;
+
+      if (path.includes("ERROR")) {
+        name.classList.add("error");
+      }
+
+      card.appendChild(img);
+      card.appendChild(name);
+      gallery.appendChild(card);
+
+      // Click -> open fullscreen
+      card.addEventListener("click", () => {
+        overlayImg.src = path;
+        overlay.style.display = "flex";
+      });
+    });
+
+    // Close overlay on click or ESC
+    overlay.addEventListener("click", () => {
+      overlay.style.display = "none";
+      overlayImg.src = "";
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        overlay.style.display = "none";
+        overlayImg.src = "";
+      }
+    });
+  </script>
+</body>
+</html>

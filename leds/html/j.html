@@ -1,0 +1,163 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Juliet</title>
+    <style>
+        body {
+         background-color: #f0f0f0;
+        }
+        .block {
+         padding: 8px;
+         margin: 5px;
+         background-color: white;
+         border-radius: 12px;
+         display: block;
+        }
+        .main {
+         width: 650px;
+         margin: 0 auto;
+         line-height: 1.6;
+         font-size: 0.8rem;
+        }
+        span {
+         font-family: monospace;
+         font-weight: 300;
+         background-color: #F0FFFF;
+        }
+        .code {
+         font-weight: 400;
+         font-family: monospace;
+         font-size: 0.8rem;
+         line-height: 1.2;
+         border: 1px solid #e0e0e0;
+         border-radius: 6px;
+         background-color: #F0FFFF;
+         padding: 5px;
+         margin: 5px;
+        }
+        .code_server {
+         font-weight: 400;
+         font-family: monospace;
+         font-size: 0.8rem;
+         line-height: 1.2;
+         border: 1px solid #e0e0e0;
+         border-radius: 6px;
+         background-color: #FFFFF0;
+         padding: 5px;
+         margin: 5px;
+        }
+        p {
+         margin: 8px;
+        }
+        p:hover {
+         font-weight: 600;
+        }
+        span:hover {
+         font-weight: 600;
+        }
+        .popup {
+          position: fixed;
+          font-weight: 600;
+          font-size: 14px;
+          background: yellow;
+          top: 45%;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 8px 4px 0 #00000044;
+          flex-direction: column-reverse;
+          display: flex;
+        }
+        .popup > h6 {
+          font-weight: 900;
+          font-size: 18px;
+          margin: 2px 12px 6px;
+        }
+        .warn {
+        font-weight: 600;
+        color: red;
+         }
+    </style>
+</head>
+<body>
+<script>
+    function popup(msg){
+     const popup = document.createElement('div');
+     popup.classList.add('popup');
+     const popup_header = document.createElement('h6');
+     popup_header.innerText = "Copied:";
+     popup.innerText = msg;
+     popup.appendChild(popup_header);
+     document.body.appendChild(popup);
+     setTimeout(()=>{
+      popup.remove();
+     }, 1200);
+    }
+    function copy(copy_id) {
+     console.log(copy_id);
+     const element = document.querySelector("#" + copy_id);
+     const storage = document.createElement('textarea');
+     text = element.innerHTML;
+     storage.value = text;
+     document.body.appendChild(storage);
+     storage.select();
+     document.execCommand("copy");
+     storage.remove();
+     popup(text);
+    }
+    function copy_text(text) {
+     console.log(text);
+     const storage = document.createElement('textarea');
+     storage.value = text;
+     document.body.appendChild(storage);
+     storage.select();
+     document.execCommand("copy");
+     storage.remove();
+     popup(text);
+    }
+</script>
+<div class="main">
+ <div class=block>
+     <h3 style="text-align: center;">BER TEST JULIET</h3>
+     <b>1. Connect system to ft jig & power on the system:</b><br>
+     start chiller
+     <div class="code_server">
+        <p id="t1" onclick="copy('t1')">java -jar /usr/flexfs/ST/test_modules/bin/water_cooling/TM171_3KW.jar -retry 1 -method setRemoteStop /start</p>
+     </div>
+         to power on
+     <div class="code_server">
+        <p id="t2" onclick="copy('t2')">snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.3.0 i 2</p>
+     </div>
+     enter minicom
+     <div class="code_server">
+        <p id="t4" onclick="copy('t4')">minicom</p>
+     </div>
+     user + password
+     <p id="t5" onclick="copy('t5')">root</p>
+     <div class="code">
+        <p id="t6" onclick="copy('t6')">mst start ; dhclient ; mst server start -s a</p>
+     </div>
+     copy the <i class="warn">IP</i> in eth0
+     <div class="code">
+        <p id="t7" onclick="copy('t7')">ifconfig</p>
+     </div>
+     exit from minicom<br>
+     run from server :
+     <div class="code_server">
+         <p id="t8" onclick="copy('t8')">mst remote add <i class="warn">IP</i> -s a</p>
+        <p id="t9" onclick="copy('t9')">python3.6 /usr/flexfs/ST/test_modules/bin/phy_diag/rev_0_94_0/phy_monitor.py</p>
+     </div>
+
+     <div class="code_server">
+        <p id="t10" onclick="copy('t10')">python3.6 /usr/flexfs/ST/test_modules/bin/phy_diag/rev_0_88_4/phy_package/phy_diag.py c -d /dev/mst/192.168.10.20\:23108\,@dev@mst@mt54004_pciconf0 -p 1-20 -a TG</p>
+        <p id="t11" onclick="copy('t11')">python3.6 /usr/flexfs/ST/test_modules/bin/phy_diag/rev_0_88_4/phy_package/phy_diag.py c -d /dev/mst/192.168.10.20\:23108\,@dev@mst@mt54004_pciconf1 -p 1-20 -a TG</p>
+        <p id="t12" onclick="copy('t12')">curl http://admin:@192.168.10.1:80/SetPower.cgi?p1=0+p2=0; sleep 5; curl http://admin:@192.168.10.1:80/SetPower.cgi?p1=</p>
+     </div>
+     to power off
+     <div class="code_server">
+         <p id="t3" onclick="copy('t3')">snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.3.0 i 1</p>
+     </div>
+
+ </div>
+</div>
+</body>
+</html>

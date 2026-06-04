@@ -1,0 +1,2 @@
+project_name=logs_reader
+repo_access=private-solo

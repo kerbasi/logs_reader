@@ -1,0 +1,348 @@
+<html lang="en">
+ <head>
+  <meta charset="UTF-8">
+  <title>WiKi</title>
+  <style>
+  body {
+   background-color: #f0f0f0;
+  
+  }
+  .block {
+   padding: 10px;
+   margin: 5px;
+   background-color: white;
+   border-radius: 9px;
+   display: block;
+  }
+  .main {
+   width: 900px;
+   margin: 0 auto;
+   line-height: 1.6;
+  }
+  h3 {
+   margin: 10px 15px 5px;
+   font-weight: 500;
+   font-family: Sans;
+  }
+  h4 {
+   margin: 10px 25px 5px;
+   font-family: Sans;
+  }
+  span {
+   font-family: monospace;
+   font-weight: 300;
+   font-size: 1rem;
+   background-color: #F0FFFF;
+  }
+  .code {
+   font-weight: 300;
+   font-family: monospace;
+   font-size: 1rem;
+   border: 1px solid #e0e0e0;
+   border-radius: 6px;
+   background-color: #F0FFFF;
+   padding: 5px;
+   margin: 5px;
+  }
+  p {
+   margin: 2px;
+  }
+  .popup {
+    position: fixed;
+    font-weight: bold;
+    font-size: 20px;
+    background: yellow;
+    top: 45%;
+    left: 35%;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 8px 4px 0 #00000044;
+  }
+  .row {
+   display: flex;
+   background-color: #E0FFE0;
+   border-radius: 9px;
+   align-items: center;
+   box-shadow: 0 2px 12px 0 #00000044;
+  }
+  .cell {
+   padding: 10px;
+   margin: auto;
+   text-align: center;
+   background-color: white;
+   border-radius: 7px;
+   box-shadow: 0 2px 2px 0 #00000044;
+/*   display: inline-grid;*/
+  }
+ </style>
+ </head>
+ <body>
+  <script>
+   function popup(msg){
+    const popup = document.createElement('div');
+    popup.classList.add('popup');
+    popup.innerText = msg;
+    document.body.appendChild(popup);
+    setTimeout(()=>{
+     popup.remove();
+    }, 2000);
+   }
+   function copy(copy_id) {
+    console.log(copy_id);
+    const element = document.querySelector("#" + copy_id);
+    const storage = document.createElement('textarea');
+    text = element.innerHTML;
+    storage.value = text;
+    document.body.appendChild(storage);
+    storage.select();
+    document.execCommand("copy");
+    storage.remove();
+    popup('"' + text + '" copied.');
+   }
+   function copy_text(text) {
+    console.log(text);
+    const storage = document.createElement('textarea');
+    storage.value = text;
+    document.body.appendChild(storage);
+    storage.select();
+    document.execCommand("copy");
+    storage.remove();
+    popup('"' + text + '" copied.');
+   }
+  </script>
+  <div class=main>
+   <div class=block>
+    <h3>Soft</h3>
+    <span>flexer</span> mellanox test <br> 
+    <span>tango</span>  nvidia test<br> 
+    <span>GS</span>  General Setup - Software versions needed<br>
+    <span>UM</span> User Manual, station hardware diagram <br> 
+    <span>INFO</span> installed drivers versions<br>
+    <span>OS</span> Operation system - CRM<br>
+    <span>Ticket</span><br>
+    <a href="http://10.229.8.35/">QMS</a><br>
+    <span onclick="copy_text('Master-List');">Master-List</span>  <br>
+    <span onclick="copy_text('Helper-Technicians');">Helper-Technicians</span> <br>
+    AntiVirus status
+    <span onclick="copy_text('sentinelctl management status');">sentinelctl management status</span><br>
+    AntiVirus install
+    <span onclick="copy_text('/usr/flexfs/users/tamird/S1.sh');">/usr/flexfs/users/tamird/S1.sh</span>
+   </div>
+   <div class=block>
+    <h3>Test run</h3>
+    <h4>Flexer</h4>
+    <i>don't write to server</i><br>
+    <span id="t1" onclick="copy('t1')">flexer -n -npc -auto_pn</span><br>
+    <i>step by step</i><br>
+    <span id="t2" onclick="copy('t2')">flexer -n -npc -auto_pn -STRUNNER=1</span><br>
+    <i>Master</i><br>
+    <span id="t3" onclick="copy('t3')">flexer -n -master</span>
+    <h4>MOOSE lift up</h4>
+    <h4>tango</h4>
+    <div class=row>
+     <div class=cell><img src=img/1.png alt="login"><br> <i>login</i> (with admin rights)</div>
+     <div class=cell><img src=img/2.png alt="Step by step"><br><i>Step by Step</i></div>
+     <div class=cell><img src=img/3.png alt="settings"><br><i>Settings</i> - check <i>npc</i></div>
+     <div class=cell><img src=img/4.png alt="Go"><br><i>Go</i> - select only <u>first</u></div>
+    </div>
+   </div>
+  <div class=block>
+  <h2>Crocodile</h2>
+Lift up<br>
+  <span onclick="copy_text('/usr/flexfs/ST/test_modules/bin/JTAG_jig_control/Moose_lift_up_and_insert_ac.pl');">/usr/flexfs/ST/test_modules/bin/JTAG_jig_control/Moose_lift_up_and_insert_ac.pl</span><br>
+Lift down<br>
+  <span onclick="copy_text('/usr/flexfs/ST/test_modules/bin/JTAG_jig_control/Moose_extract_ac_and_lift_down.pl');">/usr/flexfs/ST/test_modules/bin/JTAG_jig_control/Moose_extract_ac_and_lift_down.pl</span><br>
+Turn sensors ON<br>
+  <span onclick="copy_text('snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.7.0 i 2');">snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.7.0 i 2</span><br>
+Turn sensors OFF<br>
+  <span onclick="copy_text('snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.7.0 i 1');">snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.7.0 i 1</span></div>
+   <div class=block>
+    <h4>MOOSE sensors</h4>
+    bit <b>0</b> - unit present sensor<br>
+    bit <b>1</b> - power in sensor<br>
+    bit <b>2</b> - ? sensor<br>
+    bit <b>3,4</b> & <b>5,6</b> - lift up sensors (6 - up left forward)
+    <h4>IP POWER</h4>
+    <b onclick="copy('t4')">Fresh ip power address: </b><a href="http://192.168.10.100" id="t4">192.168.10.100</a><br>
+    <b onclick="copy('t5')">Right ip power address: </b><a href="http://192.168.10.1" id="t5">192.168.10.1</a><br>
+    user: <span onclick="copy_text('administrator')">administrator</span><br>
+    password: <span onclick="copy_text('password')">password</span><br>
+    Port 2 OFF<br>
+    <div class=code onclick="copy_text('snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.3.0 i 1');">snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.<b>3</b>.0 i <b>1</b></div>
+    Port 3 OFF<br> 
+<div class=code onclick="copy_text('snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.4.0 i 1')">snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.<b>4</b>.0 i <b>1</b></div>
+    Port 2 ON<br>
+<div class=code onclick="copy_text('snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.3.0 i 2')">snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.<b>3</b>.0 i <b>2</b></div>
+    Port 3 ON<br>
+<div class=code onclick="copy_text('snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.4.0 i 2')">snmpset -v2c -c administrator 192.168.10.1 .1.3.6.1.4.1.21317.1.3.2.2.2.2.<b>4</b>.0 i <b>2</b></div>
+    <h4>JTAG</h4>
+    user
+    <b>debug</b><br>
+    pass
+    <b>debug123</b><br>
+    SN
+    <b>test</b><br>
+    PN
+    <b>SA00<i>xxxx</i></b>
+   </div>
+   <div class=block>
+    <h3>HOW TO</h3>
+    <h4>Unlock Maintenance Limit</h4>
+    <i>OS</i> - Ticket System - find station - key<br>
+    <i>Root Cause</i> Corrective Maintenance <br>
+    <i>Solution</i> Cable problems <br> 
+    <i>Details</i> OPT <br> 
+    <i>Remarks</i> Replaced cable <u>sn</u> to <u>new sn</u> <br>
+   </div>
+   <div class=block>
+    <h3>Drivers</h3>
+    <span id="t6" onclick="copy('t6')">ofed_info -s</span><br> 
+    <span id="t7" onclick="copy('t7')">flint -v</span> MFT version check<br> 
+    <span id="t8" onclick="copy('t8')">mst restart</span> restart usb-i2c interface<br> 
+    <span id="t9" onclick="copy('t9')">mst status</span> watch connected devices<br> 
+    mtcr_driver <span onclick="copy_text('cd /usr/flexfs/tftpboot/tools/TOOLS/mtcr_driver/mtcr_driver_rev_1.0')">/usr/flexfs/tftpboot/tools/TOOLS/mtcr_driver/mtcr_driver_rev_1.0*</span> <br>
+    OFED drivers. need <i>--force</i> flag <span onclick="copy_text('cd /usr/flexfs/utils/tech/OFED');">/usr/flexfs/utils/tech/OFED</span><br>
+    Sample<br>
+    cd /usr/flexfs/utils/tech/OFED/MLNX_OFED_LINUX-4.4-2.0.7.0-rhel7.2-x86_64/<br>
+    <span id="t10" onclick="copy('t10');">./mlnxofedinstall --force</span><br>
+    <i>MFT drivers</i> <span id="t11" onclick="copy('t11');">/usr/flexfs/utils/tech/MFT</span><br> 
+   </div>
+   <div class=block>
+    <h3>Anaconda CUSTOMIZATION</h3>
+    <i>PXE version:</i> RH7.2x64_2018_E3_TOR<br>
+    <i>MFT driver:</i> 4.11.0-203<br>
+    <i>OFED driver:</i> 4.4-2.0.7.0
+    <div onclick="copy_text('/usr/flexfs/create_links;cd /usr/flexfs/utils/tech/MFT/mft-4.11.0-203-int/;./install.sh;cd /usr/flexfs/utils/tech/OFED/MLNX_OFED_LINUX-4.4-2.0.7.0-rhel7.2-x86_64/;./mlnxofedinstall --force');" class=code>
+     /usr/flexfs/create_links
+     cd /usr/flexfs/utils/tech/MFT/mft-4.11.0-203-int/<br>
+     ./install.sh<br>
+     cd /usr/flexfs/utils/tech/OFED/MLNX_OFED_LINUX-4.4-2.0.7.0-rhel7.2-x86_64/<br>
+     ./mlnxofedinstall --force
+    </div>
+   </div>
+   <div class=block>
+    <h3>Tigon customization</h3>
+    <i>PN:</i> SA00<b>4280</b><br>
+    <i>PXE version:</i> RH7.2x64_2019_E4_TOR<br>
+    <i>MFT driver:</i> 4.13.0-56<br>
+    <i>OFED driver:</i> 4.4-2.0.7.0
+    <i>MTCR driver:</i> 1.03
+    <div class=code>
+     cd /usr/flexfs/utils/tech/OFED/MLNX_OFED_LINUX-4.4-2.0.7.0-rhel7.2-x86_64/<br>
+     ./mlnxofedinstall --force<br>
+     cd /usr/flexfs/utils/tech/MFT/mft-4.13.0-56-int/<br>
+     ./install.sh<br>
+     cd /usr/flexfs/tftpboot/tools/TOOLS/mtcr_driver/mtcr_driver_rev_1.03/<br>
+     ./install.sh
+    </div>
+    at once
+    <div class=code>
+     cd /usr/flexfs/utils/tech/OFED/MLNX_OFED_LINUX-4.4-2.0.7.0-rhel7.2-x86_64/; ./mlnxofedinstall --force; cd /usr/flexfs/utils/tech/MFT/mft-4.13.0-56-int/; ./install.sh; cd /usr/flexfs/tftpboot/tools/TOOLS/mtcr_driver/mtcr_driver_rev_1.03/; ./install.sh
+    </div>
+    <button onclick="copy_text('cd /usr/flexfs/tftpboot/tools/TOOLS/mtcr_driver/mtcr_driver_rev_1.03/; ./install.sh; cd /usr/flexfs/utils/tech/MFT/mft-4.13.0-56-int/; ./install.sh; cd /usr/flexfs/utils/tech/OFED/MLNX_OFED_LINUX-4.4-2.0.7.0-rhel7.2-x86_64/; ./mlnxofedinstall --force');">press to copy</button>
+   </div>
+   <div class=block>
+    <h3>LED Leopard, LionFish, Tigon</h3>
+    <i>PN:</i> SA00<b>3730</b>, SA00<b>2486</b>, SA00<b>4283</b><br>
+    <i>PXE version:</i> RH8.3x64_2022_E3_NEW_LED<br>
+    <i>MFT driver:</i> 4.18.0-304<br>
+    <i>OFED driver:</i> 4.9-3.1.6.0<br>
+    <i>MTCR driver:</i> 1.04
+    <div class=code  onclick="copy_text('cd /usr/flexfs/utils/tech/OFED/MLNX_OFED_LINUX-4.9-3.1.6.0-rhel8.3-x86_64/; ./mlnxofedinstall --force; cd /usr/flexfs/utils/tech/MFT/mft-4.18.0-304-int/; ./install.sh; cd /usr/flexfs/tftpboot/tools/TOOLS/mtcr_driver/mtcr_driver_rev_1.04/; ./install.sh');">
+     cd /usr/flexfs/utils/tech/OFED/MLNX_OFED_LINUX-4.9-3.1.6.0-rhel8.3-x86_64/<br>
+     ./mlnxofedinstall --force<br>
+     cd /usr/flexfs/utils/tech/MFT/mft-4.18.0-304-int/<br>
+     ./install.sh<br>
+     cd /usr/flexfs/tftpboot/tools/TOOLS/mtcr_driver/mtcr_driver_rev_1.04/<br>
+     ./install.sh
+    </div>
+   </div>
+   <div class=block>
+    <h3>Juliet FT</h3>
+    <i>PN:</i> SA00<b>5335</b><br>
+    <i>PXE version:</i> RH8.8x64_2023_E4_XDR<br>
+    <i>MFT driver:</i> 4.27.0-311<br>
+    <i>OFED driver:</i> 4.9-7.0.9.0<br>
+    <i>MTCR driver:</i> 1.07
+    <div class=code  onclick="copy_text('cd /usr/flexfs/utils/tech/OFED/MLNX_OFED_LINUX-4.9-7.0.9.0-rhel8.8-x86_64/; ./mlnxofedinstall --force; cd /usr/flexfs/utils/tech/MFT/mft-4.27.0-311-int/; ./install.sh; cd /usr/flexfs/tftpboot/tools/TOOLS/mtcr_driver/mtcr_driver_rev_1.07/; ./install.sh');">
+     cd /usr/flexfs/utils/tech/OFED/MLNX_OFED_LINUX-4.9-7.0.9.0-rhel8.8-x86_64/<br>
+     ./mlnxofedinstall --force<br>
+     cd /usr/flexfs/utils/tech/MFT/mft-4.27.0-311-int/<br>
+     ./install.sh<br>
+     cd /usr/flexfs/tftpboot/tools/TOOLS/mtcr_driver/mtcr_driver_rev_1.07/<br>
+     ./install.sh
+    </div>
+   </div>
+   <div class=block>
+    <h3>System 6 Juliet</h3>
+    <i>PN:</i> SA00<b>5335</b><br>
+    <i>PXE version:</i> RH8.3x64_2022_E3_WC<br>
+    <i>MFT driver:</i> 4.22.0-83<br>
+    <i>OFED driver:</i> 5.3-1.0.0.1<br>
+    <i>MTCR driver:</i> 1.07
+    <div class=code  onclick="copy_text('cd /usr/flexfs/utils/tech/OFED/MLNX_OFED_LINUX-5.3-1.0.0.1-rhel8.3-x86_64/; ./mlnxofedinstall --force; cd /usr/flexfs/utils/tech/MFT/mft-4.22.0-83-int/; ./install.sh; cd /usr/flexfs/tftpboot/tools/TOOLS/mtcr_driver/mtcr_driver_rev_1.07/; ./install.sh');">
+     cd /usr/flexfs/utils/tech/OFED/MLNX_OFED_LINUX-5.3-1.0.0.1-rhel8.3-x86_64/<br>
+     ./mlnxofedinstall --force<br>
+     cd /usr/flexfs/utils/tech/MFT/mft-4.22.0-83-int/<br>
+     ./install.sh<br>
+     cd /usr/flexfs/tftpboot/tools/TOOLS/mtcr_driver/mtcr_driver_rev_1.07/<br>
+     ./install.sh
+    </div>
+   </div>
+   <div class=block>
+    <h3>MOOSE first install</h3>
+    <h4>Drivers</h4>
+    <div onclick="copy_text('cd /usr/flexfs/tftpboot/tools/TOOLS/mtcr_driver/mtcr_driver_rev_1.07/;./install.sh;cd /usr/flexfs/utils/tech/MFT/mft-4.23.0-310-int/;./install.sh');" class=code>
+     cd /usr/flexfs/utils/tech/MFT/mft-4.23.0-310-int/<br>
+     ./install.sh<br>
+     cd /usr/flexfs/tftpboot/tools/TOOLS/mtcr_driver/mtcr_driver_rev_1.07/<br>
+     ./install.sh
+    </div>
+    <h4>/usr/local/qms3/station.ini</h4>
+    <div onclick="copy_text('JIG 1');" class=code>
+     customer_code 0143<br>
+     station_code 1090<br>
+     QMS3_server_IP 10.229.8.35<br>
+     IP_POWER 1<br>
+     <b>JIG 1</b><br>
+     pc_name flex<b style="color: red">XXYY</b>
+    </div>
+    <h4>/usr/local/qms3/mtcr_driver_mft.txt </h4>
+    <div class=code>4.23.0-310</div>
+   </div>
+   <div class=block>
+    <h3>Cheats</h3> 
+    <span id="t12" onclick="copy('t12')">/usr/flexfs/create_links</span>  <br>
+    <span onclick="copy_text('/usr/flexfs/users/hca/links')">/usr/flexfs/users/hca/links</span> enhanced links <br>
+    <span id="t13" onclick="copy('t13')">/usr/flexfs/users/PTISH/checksetup.sh</span> shows required driver versions vs installed <br>
+    <span id="t14" onclick="copy('t14')">/usr/flexfs/users/PTISH/show_last_run.sh</span> last runs by stations, UUT, PN
+   </div>
+   <div class=block>
+    <h3>BULL SEQUANA</h3>
+    <h4>Chiller start</h4>
+    <div id="t15" onclick="copy('t15')" class=code>java -jar /usr/flexfs/ST/test_modules/Water_Cooling_Controller/rev_1.22/TM171_1KW.jar -method setRemoteStart</div>
+    <h4>WC_PRESSURE_HOLD logs</h4>
+    <div id="t16" onclick="copy('t16')" class=code>/usr/log/WC_PRESSURE_HOLD/SA002616/202407</div>
+    <div id="t17" onclick="copy('t17')" class=code>/usr/log/customization/11891122/</div>
+    <h4>LED</h4>
+    <div id="t18" onclick="copy('t18');" class="code">/usr/flexfs/utils/tech/HCA_Camera_Stream_Multi</div>
+    1st camera - 0 - right <br>
+    2nd camera - 2 - left (line)
+   </div>
+   <div class=block>
+    <h3>LED</h3>
+    <span id="t19" onclick="copy('t19')">cd /usr/flexfs/utils/tech/led_test_2/; python3 calibration.py</span>
+    MOOSE calibration<br>
+    <span id="t20" onclick="copy('t20')">cd /usr/flexfs/utils/tech/led_test/; python3 calibration.py</span>
+    others calibration<br>
+    <span id="t21" onclick="copy('t21')">/usr/flexfs/users/loayk/scripts/Led_Test/led_test.pl</span>
+    View test result images. need path to <i>gz</i>. Take from short log 
+    <span id="t22" onclick="copy('t22')">cat *.data | grep HD_CAM_LOG</span><br>
+    <span id="t23" onclick="copy('t23')">nano /AutomaticLedsTest/camera_ini_file.ini</span>
+    Camera settings. don't touch<br>
+    <span id="t24" onclick="copy('t24')">cd /usr/log/camera_calibration/images/</span>
+    calibration logs<br>
+   </div>
+  </div>
+ </body>
+</html>

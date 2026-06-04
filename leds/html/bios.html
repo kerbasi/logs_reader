@@ -1,0 +1,242 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>BIOS update</title>
+    <style>
+        body {
+         background-color: #f0f0f0;
+        }
+        .block {
+         padding: 8px;
+         margin: 5px;
+         background-color: white;
+         border-radius: 12px;
+         display: block;
+        }
+        .main {
+         width: 650px;
+         margin: 0 auto;
+         line-height: 1.6;
+         font-size: 0.8rem;
+        }
+        span {
+         font-family: monospace;
+         font-weight: 300;
+         background-color: #F0FFFF;
+        }
+        .code {
+         font-weight: 400;
+         font-family: monospace;
+         font-size: 0.8rem;
+         line-height: 1.2;
+         border: 1px solid #e0e0e0;
+         border-radius: 6px;
+         background-color: #F0FFFF;
+         padding: 5px;
+         margin: 5px;
+        }
+        .code_server {
+         font-weight: 400;
+         font-family: monospace;
+         font-size: 0.8rem;
+         line-height: 1.2;
+         border: 1px solid #e0e0e0;
+         border-radius: 6px;
+         background-color: #FFFFF0;
+         padding: 5px;
+         margin: 5px;
+        }
+        p {
+         margin: 8px;
+        }
+        p:hover {
+         font-weight: 600;
+        }
+        span:hover {
+         font-weight: 600;
+        }
+        .popup {
+          position: fixed;
+          font-weight: 600;
+          font-size: 14px;
+          background: yellow;
+          top: 45%;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 8px 4px 0 #00000044;
+          flex-direction: column-reverse;
+          display: flex;
+        }
+        .popup > h6 {
+          font-weight: 900;
+          font-size: 18px;
+          margin: 2px 12px 6px;
+        }
+    </style>
+</head>
+<body>
+<script>
+    function popup(msg){
+     const popup = document.createElement('div');
+     popup.classList.add('popup');
+     const popup_header = document.createElement('h6');
+     popup_header.innerText = "Copied:";
+     popup.innerText = msg;
+     popup.appendChild(popup_header);
+     document.body.appendChild(popup);
+     setTimeout(()=>{
+      popup.remove();
+     }, 1200);
+    }
+    function copy(copy_id) {
+     console.log(copy_id);
+     const element = document.querySelector("#" + copy_id);
+     const storage = document.createElement('textarea');
+     text = element.innerHTML;
+     storage.value = text;
+     document.body.appendChild(storage);
+     storage.select();
+     document.execCommand("copy");
+     storage.remove();
+     popup(text);
+    }
+    function copy_text(text) {
+     console.log(text);
+     const storage = document.createElement('textarea');
+     storage.value = text;
+     document.body.appendChild(storage);
+     storage.select();
+     document.execCommand("copy");
+     storage.remove();
+     popup(text);
+    }
+</script>
+<div class="main">
+ <div class=block>
+     <h3 style="text-align: center;">UPDATE JULIET BIOS to v16</h3>
+     <b>1. Connect system to customization jig & power on the system:</b>
+     <div class="code_server">
+     <p id="t1" onclick="copy('t1')"java -jar /usr/flexfs/ST/test_modules/bin/water_cooling/rev_1.20/TM171_1KW_Socket.jar -method setRemoteStop</p>
+     <p id="t2" onclick="copy('t2')">java -jar /usr/flexfs/ST/test_modules/bin/water_cooling/rev_1.20/TM171_1KW_Socket.jar -method setRemoteStart</p>
+     <p id="t3" onclick="copy('t3')">curl http://admin:@192.168.10.1:80/SetPower.cgi?p1=1+p2=1</p>
+     </div>
+ </div>
+<div class=block>
+    <b>2. Open <span onclick="copy_text('minicom');">minicom</span> check OPT OS exist</b>, connect BMC & start mctp service in BMC:<br>
+     If OPT OS does not exist, boot ONIE and run the commands below:<br>
+    <div class="code">
+    <p id="t4" onclick="copy('t4')">amidelnx_64 /SP N5110_LD /SK HI166 /SS MT2431X00013 /SV V0-K*G0EgEgJa-S*RgRgRgTcTcFcEiRgRgRgSaSaGeGb-L*GbFdEiTcFdSaXbXcTg-P*OaOaOaOaHaEi-C*GeGdFdRiRaEg /CSK N5110_LD /CS MT2431X00013 /BP VMOD0021 /BS MT2428XZ0NJ5 /BV A1 /CV A3 /SU fc15c360c455ef118000fc6a1cfa0180 /SM "Nvidia" /BM "Nvidia" /CM "Nvidia" /SF "Not Specified"</p>
+    <p id="t5" onclick="copy('t5')">onie-nos-install http://192.168.10.10//x86_for_testing/opt-os-sonic_7.0040.1100_for_ES_002_LK6.1.38_x86-64_installer.bin</p></div>
+     Boot OS:<br>
+     User and password: <span onclick="copy_text('root');">root</span><br>
+     <b>2-a. Verify you have "usb0" interface</b>, by running "<span onclick="copy_text('ifconfig');">ifconfig</span>" command.<br>
+     if "usb0" not exist run CPLD update procedure:<br>
+     Run from <i>minicom</i>:
+    <div class="code">
+     <p id="t6" onclick="copy('t6')">mst restart --with_i2cdev</p>
+     <p id="t7" onclick="copy('t7')">scp root@192.168.10.10:/usr/flexfs/customization_data/920-9K36F-00MV-ES1/FUI000320_BURN_JULIET_TTM_CPLD000370_REV0104_CPLD000377_REV0104_CPLD000373_REV0100_CPLD000390_REV0100_OPN.vme /tmp/</p>
+     <p onclick="copy_text('yes');">yes</p>
+    </div>
+     password: <span onclick="copy_text('12345');">12345</span>
+    <div class="code"><p id="t8" onclick="copy('t8')">cpldupdate --gpio /tmp/FUI000320_BURN_JULIET_TTM_CPLD000370_REV0104_CPLD000377_REV0104_CPLD000373_REV0100_CPLD000390_REV0100_OPN.vme</p></div>
+    <br>Run from the server:
+    <div class="code_server"><p id="t9" onclick="copy('t9')">curl http://admin:@192.168.10.1:80/SetPower.cgi?p1=0+p2=0; sleep 5; curl http://admin:@192.168.10.1:80/SetPower.cgi?p1=1+p2=1</p></div><br>
+     <b>After power cycle return to BIOS update flow from "<i>usb0</i>" interface verification.</b><br>
+     <span onclick="copy_text('bios_version.sh');">bios_version.sh</span> -> if BIOS SubVersion =  <i>0ACTV_00.00.016</i> - <b>stop</b> process update not required!<br>
+    <div class="code">
+    <p id="t10" onclick="copy('t10')">rm -rf /root/.ssh/known_hosts</p>
+     <p id="t11" onclick="copy('t11')">ssh 10.0.1.1</p>
+     <p id="t12" onclick="copy('t12')">yes</p>
+    </div>
+     Password: <span onclick="copy_text('0penBmc');">0penBmc</span><br>
+     Old password: 0penBmc<br>
+     New password: <span onclick="copy_text('Nvidia_cust10!');">Nvidia_cust10!</span><br>
+     retype new password: Nvidia_cust10!<br>
+    <div class="code">
+     <p id="t13" onclick="copy('t13')">systemctl enable mctp-pcie-ctrl</p>
+     <p id="t14" onclick="copy('t14')">systemctl start mctp-pcie-ctrl</p>
+     <p id="t15" onclick="copy('t15')">cat /sys/class/gpio/gpio771/value</p>
+     <p id="t16" onclick="copy('t16')">echo 0 > /sys/class/gpio/gpio771/value</p>
+     <p id="t17" onclick="copy('t17')">exit</p>
+    </div>
+</div>
+<div class=block>
+<b>3. Copy BIOS</b> image to OPT OS:<br>
+     <span id="t18" onclick="copy('t18')">scp root@192.168.10.10:/tftpboot/os/X86_Bios/0ACTV_00.00.016/erot_transition/Release/cec1736-apfw-0000010-transition.fwpkg /tmp/</span><br>
+     <p><span onclick="copy_text('yes');">yes</span></p>
+     Password: <span onclick="copy_text('12345');">12345</span><br>
+     <span id="t19" onclick="copy('t19')">scp root@192.168.10.10:/tftpboot/os/X86_Bios/0ACTV_00.00.016/Release/erot_sign_debug/cec1736-apfw-0000010.fwpkg /tmp/</span><br>
+     Password: <span onclick="copy_text('12345');">12345</span><br>
+    </div>
+    <div class=block>
+     <b>4. Run force update & verify state:</b><br>
+     <div class="code">
+      <p id="t20" onclick="copy('t20')">curl -k -u root:Nvidia_cust10! -X PATCH -d '{ "HttpPushUriOptions":{"ForceUpdate":true}}' https://10.0.1.1/redfish/v1/UpdateService</p>
+      <p id="t21" onclick="copy('t21')">curl -k -u root:Nvidia_cust10! https://10.0.1.1/redfish/v1/UpdateService | grep ForceUpdate</p>
+      </div>
+     </div>
+    <div class=block>
+        <b>5. Burn transition image:</b>
+     <div><p class="code" id="t22" onclick="copy('t22')">curl -k -u root:Nvidia_cust10! -H "Content-Type: application/octet-stream" -X POST https://10.0.1.1/redfish/v1/UpdateService -T /tmp/cec1736-apfw-0000010-transition.fwpkg</p></div>
+    </div>
+    <div class=block>
+     <b>6. Run the next command every 1 minute</b> till you get "PercentComplete": 100, "TaskState": "Completed", & "TaskStatus": "OK".
+     <div><p class="code" id="t23" onclick="copy('t23')">curl -k -u root:Nvidia_cust10! -X GET https://10.0.1.1/redfish/v1/TaskService/Tasks/0</p></div>
+    </div>
+    <div class=block>
+     <b>7. Power cycle the systyem:</b>
+     <div><p class="code_server" id="t24" onclick="copy('t24')">curl http://admin:@192.168.10.1:80/SetPower.cgi?p1=0+p2=0; sleep 5; curl http://admin:@192.168.10.1:80/SetPower.cgi?p1=1+p2=1</p></div>
+    </div>
+    <div class=block>
+        <b>8. Open <i>minicom</i>, boot OPT_OS, connect to BMC & check ACTIVE SLOT number</b><br>
+     User and pass: <span onclick="copy_text('root');">root</span><br>
+     <span onclick="copy_text('ssh 10.0.1.1');">ssh 10.0.1.1</span><br>
+     Password: <span onclick="copy_text('Nvidia_cust10!');">Nvidia_cust10!</span>
+     <div class="code">
+      <p id="t25" onclick="copy('t25')">mctp-vdm-util -t 16 -c query_boot_status -m | grep AP0_ACTIVE_SLOT</p>
+      <p id="t26" onclick="copy('t26')">cat /sys/class/gpio/gpio771/value</p>
+      <p id="t27" onclick="copy('t27')">echo 0 > /sys/class/gpio/gpio771/value</p>
+      <p onclick="copy_text('exit');">exit</p>
+     </div>
+    </div>
+    <div class=block>
+        <b>9. Check BIOS SubVersion</b> - version must be "0ACTV_00.00.016":
+     <div><p class="code" onclick="copy_text('bios_version.sh');">bios_version.sh</p></div>
+    </div>
+    <div class=block>
+        <b>10. Run BIOS update:</b>
+     <div class="code">
+      <p id="t28" onclick="copy('t28')">curl -k -u root:Nvidia_cust10! -X PATCH -d '{ "HttpPushUriOptions":{"ForceUpdate":true}}' https://10.0.1.1/redfish/v1/UpdateService</p>
+      <p id="t29" onclick="copy('t29')">curl -k -u root:Nvidia_cust10! https://10.0.1.1/redfish/v1/UpdateService | grep ForceUpdate</p>
+      <p id="t30" onclick="copy('t30')">curl -k -u root:Nvidia_cust10! -H "Content-Type: application/octet-stream" -X POST https://10.0.1.1/redfish/v1/UpdateService -T /tmp/cec1736-apfw-0000010.fwpkg</p>
+     </div>
+    </div>
+    <div class=block>
+        <b>11. Run the next command every 1 minute</b> till you get "PercentComplete": 100, "TaskState": "Completed", & "TaskStatus": "OK".
+     <div><p class="code" id="t31" onclick="copy('t31')">curl -k -u root:Nvidia_cust10! -X GET https://10.0.1.1/redfish/v1/TaskService/Tasks/0</p></div>
+    </div>
+    <div class=block>
+        <b>12. Power cycle the systyem:</b>
+     <div class="code_server"><p id="t32" onclick="copy('t32')">curl http://admin:@192.168.10.1:80/SetPower.cgi?p1=0+p2=0; sleep 5; curl http://admin:@192.168.10.1:80/SetPower.cgi?p1=1+p2=1</p></div>
+    </div>
+    <div class=block>
+        <b>13. Open <i>minicom</i>, boot OPT_OS, connect to BMC & check ACTIVE SLOT number</b><br>
+     User: <span onclick="copy_text('root');">root</span><br>
+     Password: root<br>
+     <span onclick="copy_text('ssh 10.0.1.1');">ssh 10.0.1.1</span><br>
+     Password: <span onclick="copy_text('Nvidia_cust10!');">Nvidia_cust10!</span>
+     <div class="code">
+      <p id="t33" onclick="copy('t33')">mctp-vdm-util -t 16 -c query_boot_status -m | grep AP0_ACTIVE_SLOT</p>
+      <p id="t34" onclick="copy('t34')">fw_setenv openbmconce factory-reset</p>
+      <p id="t35" onclick="copy('t35')">exit</p>
+     </div>
+    </div>
+    <div class=block>
+        <b>14. Power off the system:</b>
+        <div class=code_server><p id="t36" onclick="copy('t36')">curl http://admin:@192.168.10.1:80/SetPower.cgi?p1=0+p2=0</p></div>
+ </div>
+</div>
+<br>
+</body>
+</html>
+java -jar /usr/flexfs/ST/test_modules/bin/water_cooling/TM171_3KW.jar -retry 1 -method setRemoteStop
