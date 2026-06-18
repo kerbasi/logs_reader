@@ -96,10 +96,10 @@ def display_results(logs: List[Dict[str, str]]):
         name_color = Colors.OKBLUE # Default neutral
         if log.get('description'):
             desc_lower = log['description'].lower()
-            if "pass" in desc_lower:
-                name_color = Colors.OKGREEN
-            elif any(x in desc_lower for x in ["fail", "error", "timeout", "exception"]):
+            if any(x in desc_lower for x in ["fail", "error", "timeout", "exception"]):
                 name_color = Colors.FAIL
+            elif "pass" in desc_lower:
+                name_color = Colors.OKGREEN
 
         print(f"{Colors.BOLD}[{idx}]{Colors.ENDC} {tags_str}{name_color}{log['name']}{Colors.ENDC}")
         print(f"    {Colors.WARNING}Path:{Colors.ENDC} {log['path']}")

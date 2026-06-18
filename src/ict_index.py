@@ -3,12 +3,44 @@ import os
 import re
 import threading
 import time
+import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-INDEX_PATH = str(Path(__file__).parent.parent / "index" / "ict_log_index.json")
+def _get_base_dir() -> Path:
+    import sys
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent.parent
+
+def _get_default_index_path() -> Path:
+    # 1. Try project root or next to exe
+    base_dir = _get_base_dir()
+    index_dir = base_dir / "index"
+    try:
+        index_dir.mkdir(parents=True, exist_ok=True)
+        # Test if writable by creating a dummy file
+        test_file = index_dir / ".write_test"
+        test_file.touch()
+        test_file.unlink()
+        return index_dir / "ict_log_index.json"
+    except OSError:
+        pass
+
+    # 2. Fallback to user home directory cache (~/.cache/logs_reader/ on Linux)
+    try:
+        fallback_dir = Path.home() / ".cache" / "logs_reader"
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+        return fallback_dir / "ict_log_index.json"
+    except OSError:
+        pass
+
+    # 3. Fallback to temp directory as a last resort
+    return Path(tempfile.gettempdir()) / "logs_reader_ict_log_index.json"
+
+INDEX_PATH = str(_get_default_index_path())
 HOT_REBUILD_INTERVAL = 300
 FULL_REBUILD_INTERVAL = 86400
 

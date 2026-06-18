@@ -219,5 +219,24 @@ class TestICTIndex(unittest.TestCase):
             self.assertEqual(len(paths), 1, "hot rebuild must not duplicate PN entries")
 
 
+class TestIndexDefaultPath(unittest.TestCase):
+    @patch("src.ict_index.Path.mkdir")
+    @patch("src.ict_index._get_base_dir", return_value=Path("/mock/base"))
+    @patch("src.ict_index.Path.touch")
+    @patch("src.ict_index.Path.unlink")
+    def test_default_path_writable(self, mock_unlink, mock_touch, mock_base_dir, mock_mkdir):
+        from src.ict_index import _get_default_index_path
+        p = _get_default_index_path()
+        self.assertEqual(str(p), str(Path("/mock/base") / "index" / "ict_log_index.json"))
+
+    @patch("src.ict_index._get_base_dir", return_value=Path("/mock/base"))
+    @patch("src.ict_index.Path.touch", side_effect=OSError)
+    @patch("src.ict_index.Path.home", return_value=Path("/mock/home"))
+    @patch("src.ict_index.Path.mkdir")
+    def test_default_path_not_writable_fallback_to_home(self, mock_mkdir, mock_home, mock_touch, mock_base_dir):
+        from src.ict_index import _get_default_index_path
+        p = _get_default_index_path()
+        self.assertEqual(str(p), str(Path("/mock/home") / ".cache" / "logs_reader" / "ict_log_index.json"))
+
 if __name__ == "__main__":
     unittest.main()

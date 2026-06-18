@@ -9,7 +9,7 @@ A lightweight Python tool for searching and viewing test log files on the Lion C
 - **FT / Customization logs** — traverses `PN/YYYYMM/` structures, reads `.mlnx` index files
 - **ICT logs** — JSON index over `TRI401`–`TRI421` machine folders with background re-indexing; opens results in LibreOffice Calc
 - **SN → PN resolution** — automatic lookup via QMS3 service; falls back to manual entry
-- **Operator names** — maps OperID numbers to names via `_RUNNERS` dict in `gui.py`
+- **Operator names** — maps OperID numbers to names dynamically from `runners.txt`
 - **No dependencies** — Python standard library only
 
 ## Requirements
@@ -101,16 +101,27 @@ The QMS3 service URL is read from `/usr/flexfs/qms3/site.ws`. If absent (e.g. on
 
 ### Operator names
 
-Edit `_RUNNERS` in `gui.py` to map OperID numbers to human-readable names:
+Edit the `runners.txt` file (located in the same directory as the script/executable or in the current working directory) to map OperID numbers to human-readable names:
 
-```python
-_RUNNERS: Dict[str, str] = {
-    "12345": "John Doe",
-    "67890": "Jane Smith",
-}
+```text
+12345: John Doe
+67890: Jane Smith
 ```
 
+The application loads these mappings dynamically at startup. If `runners.txt` is missing, a default template with initial mappings is created automatically.
+
 When an OperID matches an entry, the name is shown in the result info line instead of the raw number.
+
+## Packaging (PyInstaller on Linux)
+
+To package the tool as a standalone executable on Linux:
+
+```bash
+chmod +x build_linux.sh
+./build_linux.sh
+```
+
+This script will bundle Python code, the required RPM package (`screen-4.6.2-12.el8.x86_64.rpm`), and the LED gallery HTML assets into a single executable `dist/log_reader`.
 
 ## Tests
 

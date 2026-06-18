@@ -14,13 +14,69 @@ sys.path.append(str(Path(__file__).parent))
 from src.core import ProductResolver, LogSearcher, ICTLogSearcher, _ts_from_fname, _ts_from_desc
 from src.interface import format_description
 
-_RUNNERS: Dict[str, str] = {
-    "19476": "Daniel Suima",
-    "20992": "Oleg Karonin",
-    "21465": "Dan Trievus",
-    "19455": "Maxim Malabaev",
-    "5590": "Vladimir Volik",
-}
+def _get_base_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent
+
+def _load_runners() -> Dict[str, str]:
+    default_runners = {
+        "19476": "Daniel Suima",
+        "20992": "Oleg Karonin",
+        "21465": "Dan Trievus",
+        "19455": "Maxim Malabaev",
+        "5590": "Vladimir Volik",
+    }
+    
+    paths_to_check = [
+        Path("runners.txt"),
+        _get_base_dir() / "runners.txt"
+    ]
+    
+    runners_file = None
+    for p in paths_to_check:
+        if p.exists() and p.is_file():
+            runners_file = p
+            break
+            
+    if not runners_file:
+        # If it doesn't exist, try to write the defaults to base_dir / runners.txt
+        target_path = _get_base_dir() / "runners.txt"
+        try:
+            with open(target_path, "w", encoding="utf-8") as f:
+                f.write("# List of runners/operators mapping\n")
+                f.write("# Format: ID: Name or ID=Name\n")
+                f.write("# Empty lines and lines starting with '#' are ignored.\n")
+                f.write("# Edit this file to add or modify runners without rebuilding the application.\n\n")
+                for oid, name in default_runners.items():
+                    f.write(f"{oid}: {name}\n")
+        except Exception:
+            pass
+        return default_runners
+
+    try:
+        loaded = {}
+        with open(runners_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if ":" in line:
+                    parts = line.split(":", 1)
+                elif "=" in line:
+                    parts = line.split("=", 1)
+                else:
+                    continue
+                oid = parts[0].strip()
+                name = parts[1].strip()
+                if oid:
+                    loaded[oid] = name
+        return loaded if loaded else default_runners
+    except Exception as e:
+        print(f"Warning: Failed to load runners from {runners_file}: {e}. Using defaults.", file=sys.stderr)
+        return default_runners
+
+_RUNNERS: Dict[str, str] = _load_runners()
 
 DEFAULT_PATHS = [
     "/usr/flexfs/lion_cub/log/ft",
@@ -136,15 +192,15 @@ def _open_in_terminal(filepath: str):
 
 def _color_tag_for_log(log: dict) -> str:
     name_upper = log.get("name", "").upper()
-    if "PASS" in name_upper:
-        return "pass_tag"
     if "FAIL" in name_upper:
         return "fail_tag"
-    desc = (log.get("description") or "").lower()
-    if "pass" in desc:
+    if "PASS" in name_upper:
         return "pass_tag"
+    desc = (log.get("description") or "").lower()
     if any(x in desc for x in ("fail", "error", "timeout", "exception")):
         return "fail_tag"
+    if "pass" in desc:
+        return "pass_tag"
     return "neutral_tag"
 
 

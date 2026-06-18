@@ -1,0 +1,10 @@
+# List of runners/operators mapping
+# Format: ID: Name or ID=Name
+# Empty lines and lines starting with '#' are ignored.
+# Edit this file to add or modify runners without rebuilding the application.
+
+19476: Daniel Suima
+20992: Oleg Karonin
+21465: Dan Trievus
+19455: Maxim Malabaev
+5590: Vladimir Volik
