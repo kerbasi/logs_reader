@@ -1,4 +1,6 @@
 import re
+import json
+import shutil
 import tarfile
 import tempfile
 import webbrowser
@@ -37,14 +39,26 @@ def build_led_html(archive_path: str) -> Optional[str]:
         return None
 
     basename = archive.name
-    name_no_gz = basename[:-3] if basename.endswith('.gz') else basename
-    out_dir = Path(tempfile.gettempdir()) / name_no_gz
-    out_dir.mkdir(exist_ok=True)
+    out_dir = Path(tempfile.mkdtemp(prefix="logs_reader_led_"))
 
     try:
         with tarfile.open(str(archive), 'r:gz') as tf:
-            tf.extractall(str(out_dir))
+            members = tf.getmembers()
+            for member in members:
+                target = (out_dir / member.name).resolve()
+                inside = out_dir in target.parents or (target == out_dir and member.isdir())
+                if not inside or not (member.isfile() or member.isdir()):
+                    raise ValueError("Unsafe archive member")
+            for member in members:
+                target = out_dir / member.name
+                if member.isdir():
+                    target.mkdir(parents=True, exist_ok=True)
+                else:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with tf.extractfile(member) as source, target.open('wb') as dest:
+                        shutil.copyfileobj(source, dest)
     except Exception:
+        shutil.rmtree(str(out_dir))
         return None
 
     jpgs = sorted(f.name for f in out_dir.iterdir() if f.suffix.lower() == '.jpg')
@@ -55,8 +69,9 @@ def build_led_html(archive_path: str) -> Optional[str]:
     except OSError:
         return None
 
-    img_list = ','.join(f'"{j}"' for j in jpgs)
-    html = head + img_list + f"    ];\ndocument.title = '{basename}';\n" + end
+    img_list = ','.join(json.dumps(j).replace('<', '\\u003c') for j in jpgs)
+    title = json.dumps(basename).replace('<', '\\u003c')
+    html = head + img_list + f"    ];\ndocument.title = {title};\n" + end
 
     html_file = out_dir / 'led.html'
     html_file.write_text(html, encoding='utf-8')

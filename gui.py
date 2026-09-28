@@ -587,73 +587,18 @@ class LogReaderApp:
         if sys.platform == "win32":
             return
         missing = []
-        if not shutil.which("screen"):
-            missing.append("screen")
-        if not shutil.which("xterm"):
-            missing.append("xterm")
-        if not missing:
-            return
-
-        import subprocess
-
-        dlg = tk.Toplevel(self.root)
-        dlg.title("Installing dependencies…")
-        dlg.configure(bg=_PALETTE["bg"])
-        dlg.resizable(False, False)
-        dlg.grab_set()
-        dlg.protocol("WM_DELETE_WINDOW", lambda: None)
-
-        ttk.Label(
-            dlg,
-            text="Required components are missing. Installing…",
-            padding=(20, 12),
-        ).pack()
-
-        status_var = tk.StringVar(value="Starting…")
-        ttk.Label(dlg, textvariable=status_var, style="Dim.TLabel",
-                  padding=(20, 4)).pack()
-
-        log_text = tk.Text(
-            dlg, height=10, width=64,
-            bg=_PALETTE["bg_widget"], fg=_PALETTE["text"],
-            font=_FONT_MONO, state="disabled", borderwidth=0,
-            highlightthickness=0, padx=8, pady=6,
-        )
-        log_text.pack(padx=20, pady=(4, 20))
-
-        def _append(line: str):
-            log_text.configure(state="normal")
-            log_text.insert("end", line + "\n")
-            log_text.see("end")
-            log_text.configure(state="disabled")
-
-        rpm_path = str(Path(__file__).parent / "screen-4.6.2-12.el8.x86_64.rpm")
-
-        def _install():
-            for pkg in missing:
-                self.root.after(0, lambda p=pkg: status_var.set(f"Installing {p}…"))
-                self.root.after(0, lambda p=pkg: _append(f"→ Installing {p}…"))
-                if pkg == "screen":
-                    cmd = ["sudo", "rpm", "-i", rpm_path]
-                else:
-                    cmd = ["sudo", "dnf", "install", "-y", pkg]
-                try:
-                    result = subprocess.run(
-                        cmd, capture_output=True, text=True, timeout=120)
-                    for line in (result.stdout + result.stderr).strip().splitlines():
-                        self.root.after(0, lambda l=line: _append(l))
-                    if result.returncode == 0:
-                        self.root.after(0, lambda p=pkg: _append(f"✓ {p} installed."))
-                    else:
-                        self.root.after(0, lambda p=pkg, rc=result.returncode:
-                                        _append(f"✗ {p} failed (exit {rc})."))
-                except Exception as exc:
-                    self.root.after(0, lambda e=exc: _append(f"Error: {e}"))
-            self.root.after(0, lambda: status_var.set("Done."))
-            self.root.after(1500, dlg.destroy)
-
-        threading.Thread(target=_install, daemon=True).start()
-        dlg.wait_window()
+        if not shutil.which("less"):
+            missing.append("less")
+        if not any(shutil.which(t) for t in ("xterm", "gnome-terminal", "konsole", "xfce4-terminal",
+                                                    "lxterminal", "urxvt", "alacritty", "kitty")):
+            missing.append("a terminal emulator (for example xterm)")
+        if missing:
+            messagebox.showwarning(
+                "Optional log viewer components missing",
+                "Text log viewing needs " + ", ".join(missing) +
+                ". Ask your administrator to install these components.",
+                parent=self.root,
+            )
 
     def _init_ict_status(self):
         def _setup():
@@ -1098,14 +1043,14 @@ class LogReaderApp:
                        to_ts:   Optional[float] = None):
         if mode == "pn":
             try:
-                logs = ICTLogSearcher().search(term, from_month=from_month, to_month=to_month)
+                logs = ICTLogSearcher().search_by_pn(term, from_month=from_month, to_month=to_month)
                 if from_ts is not None:
                     logs = [l for l in logs if l.get("date", 0) >= from_ts]
                 if to_ts is not None:
                     logs = [l for l in logs if l.get("date", 0) < to_ts]
                 logs.sort(key=lambda x: x["date"], reverse=True)
             except Exception as exc:
-                self.root.after(0, lambda: self._search_done([], f"Search error: {exc}"))
+                self.root.after(0, lambda error=str(exc): self._search_done([], f"Search error: {error}"))
                 return
             self.root.after(0, lambda: self._search_done(logs))
             return
@@ -1243,7 +1188,7 @@ class LogReaderApp:
                     logs = ict.search(sn)
             logs.sort(key=lambda x: x["date"], reverse=True)
         except Exception as exc:
-            self.root.after(0, lambda: self._search_done([], f"Search error: {exc}"))
+            self.root.after(0, lambda error=str(exc): self._search_done([], f"Search error: {error}"))
             return
 
         self.root.after(0, lambda: self._search_done(logs))

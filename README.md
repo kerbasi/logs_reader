@@ -14,7 +14,7 @@ A lightweight Python tool for searching and viewing test log files on the Lion C
 
 ## Requirements
 
-- Python 3.6+
+- Python 3.11 recommended (the packaged Linux application includes Python)
 - LibreOffice (for opening ICT `.csv` files; falls back to terminal viewer if absent)
 
 ## Installation
@@ -84,7 +84,7 @@ YYYY|MM|DD|HH.MM.SS:SN[<sn>]:ULT[<ult>]:<duration>:<status>:<code>:<detail>
 
 `MACHINE` is `TRI401` through `TRI421`. Search is by SN only (no PN required).
 
-A JSON index is built in the background on first run and kept warm with incremental re-indexing (hot months every 30 s, full rebuild daily). Search is blocked until the index is ready.
+A JSON index is built in the background on first run and kept warm with incremental re-indexing (hot months every 5 minutes, full rebuild daily). The initial recent-month scan is synchronous; older months are indexed immediately in the background. Historical results can be incomplete until that first full scan finishes.
 
 Matching files open in LibreOffice Calc:
 
@@ -112,16 +112,12 @@ The application loads these mappings dynamically at startup. If `runners.txt` is
 
 When an OperID matches an entry, the name is shown in the result info line instead of the raw number.
 
-## Packaging (PyInstaller on Linux)
+## Packaging for Red Hat 8
 
-To package the tool as a standalone executable on Linux:
-
-```bash
-chmod +x build_linux.sh
-./build_linux.sh
-```
-
-This script will bundle Python code, the required RPM package (`screen-4.6.2-12.el8.x86_64.rpm`), and the LED gallery HTML assets into a single executable `dist/log_reader`.
+See [the RHEL 8 build and installation guide](packaging/RHEL8.md).
+The output is `dist/log_reader-rhel8-x86_64.tar.gz`, containing a Linux
+executable, its Python/Tk runtime and LED assets. Extract the entire archive.
+The application does not install system packages at startup.
 
 ## Tests
 

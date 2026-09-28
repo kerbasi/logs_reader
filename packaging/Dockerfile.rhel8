@@ -1,0 +1,9 @@
+FROM rockylinux:8
+RUN dnf install -y python3.11 python3.11-pip python3.11-tkinter binutils tar gzip \
+    xorg-x11-server-Xvfb xorg-x11-xauth xterm less file \
+    && dnf clean all
+RUN python3.11 -m pip install --no-cache-dir pyinstaller==6.22.3
+WORKDIR /app
+COPY . .
+RUN bash build_linux.sh
+CMD ["/app/dist/rhel8/log_reader/log_reader"]

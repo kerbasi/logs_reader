@@ -1,0 +1,12 @@
+.git
+.claude
+.codex
+.agents
+index
+__pycache__
+**/__pycache__
+build
+dist
+*.zip
+*.rpm
+.venv*

@@ -118,7 +118,7 @@ class TestICTIndex(unittest.TestCase):
         
         # Instantiate index using a subclass/patch of BASE_PATH
         # We need to temporarily disable background loop to avoid side effects during test
-        with patch("src.ict_index.HOT_REBUILD_INTERVAL", 99999), \
+        with patch.object(ICTIndex, "_start_background"), \
              patch("src.ict_index.FULL_REBUILD_INTERVAL", 99999), \
              patch.object(ICTIndex, "BASE_PATH", str(self.root)):
             
@@ -153,7 +153,7 @@ class TestICTIndex(unittest.TestCase):
         log_file = log_dir / "test_SN789.csv"
         log_file.write_text("Col1,PN,OperID\nval1,SFG-TEST,5590\n")
 
-        with patch("src.ict_index.HOT_REBUILD_INTERVAL", 99999), \
+        with patch.object(ICTIndex, "_start_background"), \
              patch("src.ict_index.FULL_REBUILD_INTERVAL", 99999), \
              patch.object(ICTIndex, "BASE_PATH", str(self.root)):
 
@@ -179,7 +179,7 @@ class TestICTIndex(unittest.TestCase):
                 d.mkdir(parents=True)
                 (d / f"log_{machine}_{month}.csv").write_text("Col\nval\n")
 
-        with patch("src.ict_index.HOT_REBUILD_INTERVAL", 99999), \
+        with patch.object(ICTIndex, "_start_background"), \
              patch("src.ict_index.FULL_REBUILD_INTERVAL", 99999), \
              patch.object(ICTIndex, "BASE_PATH", str(self.root)):
 
@@ -207,7 +207,7 @@ class TestICTIndex(unittest.TestCase):
 
         (log_dir / "log1.csv").write_text("PN\nSFG-A\n")
 
-        with patch("src.ict_index.HOT_REBUILD_INTERVAL", 99999), \
+        with patch.object(ICTIndex, "_start_background"), \
              patch("src.ict_index.FULL_REBUILD_INTERVAL", 99999), \
              patch.object(ICTIndex, "BASE_PATH", str(self.root)):
 

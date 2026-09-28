@@ -1,3 +1,4 @@
+import csv
 import json
 import os
 import re
@@ -68,10 +69,10 @@ def _parse_csv_fields(path: Path, *field_names: str) -> Dict[str, Optional[str]]
     try:
         with open(path, "r", errors="ignore") as fh:
             header: Optional[list] = None
-            for i, line in enumerate(fh):
+            for i, cols in enumerate(csv.reader(fh)):
                 if i >= 30:
                     break
-                cols = [c.strip().strip('"') for c in line.strip().split(",")]
+                cols = [c.strip() for c in cols]
                 norm = [re.sub(r'[^A-Z0-9]', '', c.upper()) for c in cols]
                 if header is None:
                     if targets & set(norm):
@@ -146,13 +147,15 @@ class ICTIndex:
                 raw = json.load(f)
         except (OSError, json.JSONDecodeError):
             return
+        if not isinstance(raw, dict):
+            return
         full_built_at = raw.pop("_full_built_at", None)
         raw.pop("_built_at", None)
         pn_index = raw.pop("_pn_index", {})
         if full_built_at:
             try:
-                self._last_full_build = datetime.fromisoformat(full_built_at).timestamp()
-            except ValueError:
+                self._last_full_build = datetime.strptime(full_built_at, "%Y-%m-%dT%H:%M:%S.%f").timestamp()
+            except (ValueError, TypeError):
                 pass
         # Migrate old format {key: [filename, ...]} → {key: {filename: None}}
         migrated: Dict[str, Dict[str, Optional[str]]] = {}
@@ -170,14 +173,21 @@ class ICTIndex:
             payload = dict(self._data)
             payload["_pn_index"] = dict(self._pn_index)
         payload["_built_at"] = datetime.now().isoformat()
-        if is_full:
-            payload["_full_built_at"] = datetime.now().isoformat()
+        if self._last_full_build:
+            payload["_full_built_at"] = datetime.fromtimestamp(self._last_full_build).isoformat(timespec="microseconds")
+        temp_path = None
         try:
-            os.makedirs(os.path.dirname(self._index_path), exist_ok=True)
-            with open(self._index_path, "w") as f:
+            parent = os.path.dirname(os.path.abspath(self._index_path))
+            os.makedirs(parent, exist_ok=True)
+            with tempfile.NamedTemporaryFile(mode="w", dir=parent, delete=False) as f:
+                temp_path = f.name
                 json.dump(payload, f)
+            os.replace(temp_path, self._index_path)
         except OSError:
             pass
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                os.unlink(temp_path)
 
     def _scan_machine_month(self, machine: str, month: str):
         key = f"{machine}/{month}"
@@ -249,16 +259,20 @@ class ICTIndex:
                     ]
                 for pn, paths in new_pn_index.items():
                     self._pn_index.setdefault(pn, []).extend(paths)
+        if is_full:
+            self._last_full_build = time.time()
         self._save(is_full=is_full)
 
     def _start_background(self, immediate_hot: bool = False) -> None:
         threading.Thread(target=self._background_loop, args=(immediate_hot,), daemon=True).start()
 
     def _background_loop(self, immediate_hot: bool = False) -> None:
-        # If no prior full build is recorded, treat now as the baseline so a
-        # full rebuild isn't triggered after the very first HOT_REBUILD_INTERVAL.
-        last_full = self._last_full_build if self._last_full_build > 0 else time.time()
-        if immediate_hot:
+        # Fresh installations must discover historical months without waiting a day.
+        last_full = self._last_full_build
+        if not last_full or time.time() - last_full >= FULL_REBUILD_INTERVAL:
+            self._build(months=None)
+            last_full = self._last_full_build
+        elif immediate_hot:
             # Rebuild hot months right away so stale oper_id values are refreshed
             self._build(months=_hot_months())
         while True:
